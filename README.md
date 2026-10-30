@@ -1,6 +1,6 @@
 # System Monitor Bar
 
-Widget (plasmoid) KDE Plasma 5.27 pour le panneau : CPU, RAM, GPU et VRAM (usage et températures), stockage (partitions, dossiers, partages réseau) et débit réseau descendant et montant.
+Widget de panneau pour **KDE Plasma 5.27** (plasmoid) et **Cinnamon 5.8** (applet) : CPU, RAM, GPU et VRAM (usage et températures), stockage (partitions, dossiers, partages réseau) et débit réseau descendant et montant.
 
 ## Fonctionnalités
 - Affichage compact en groupes : `CPU 12% 45°  RAM 15% 9.1/60G  |  GPU 3% 44°  VRAM 18% 5.9/32G  |  NET ↓1.2M ↑45K  |  / 25%  home 40%`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
@@ -22,10 +22,16 @@ Widget (plasmoid) KDE Plasma 5.27 pour le panneau : CPU, RAM, GPU et VRAM (usage
 
 ## Installation
 ```
-./install.sh      # installe ou met à jour
+./install.sh      # installe ou met à jour, pour le bureau de la session
 ./uninstall.sh    # désinstalle
 ```
-Puis clic droit sur le panneau > Mode édition > Ajouter des composants graphiques > « System Monitor Bar ».
+Le bureau est détecté avec `$XDG_CURRENT_DESKTOP` ; pour le forcer : `./install.sh cinnamon` ou `./install.sh kde`.
+
+### Cinnamon
+Clic droit sur le panneau > Applets > « System Monitor Bar » > bouton +. Une mise à jour avec `./install.sh` recharge l'applet déjà présent dans un panneau. S'il y en a plusieurs, redémarrer Cinnamon (Alt+F2, puis `r`) : Cinnamon 5.8 perd les instances quand il recharge une applet qui en a plusieurs.
+
+### KDE Plasma
+Clic droit sur le panneau > Mode édition > Ajouter des composants graphiques > « System Monitor Bar ».
 
 Pour recharger Plasma si le widget n'apparaît pas :
 ```
@@ -33,10 +39,19 @@ kquitapp5 plasmashell && kstart5 plasmashell
 ```
 
 ## Configuration
-Clic droit sur le widget > Configurer :
+Clic droit sur le widget > Configurer (Cinnamon : « Configurer… ») :
 - **Général** : intervalle (500-10000 ms, défaut 2000), source GPU (auto/nvidia/amd), interface réseau (vide = auto), seuils de température d'alerte et critique.
 - **Affichage** : pour chaque mesure (CPU, températures, fréquences, threads occupés, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
 - **Stockage** : partitions détectées à afficher dans le panneau et/ou le popup (par défaut `/` dans le panneau, toutes dans le popup) ; dossiers et points de montage suivis (chemin, quota optionnel pour les dossiers, panneau / popup) ; fréquence de recalcul de la taille des dossiers.
 
+Sous Cinnamon, les partitions détectées s'ajoutent toutes seules à la liste de l'onglet Stockage, et Panneau / Popup se cochent directement dans les listes. Les réglages sont propres à chaque instance de l'applet.
+
+## Organisation du dépôt
+- `package/` : plasmoid KDE (QML).
+- `cinnamon/sysmonitor-bar@gbaratte/` : applet Cinnamon (`stats.js` pour les données, `panelView.js` et `popupView.js` pour l'affichage).
+- `package/contents/scripts/sysstats.sh` : relevé des mesures, commun aux deux bureaux (lien symbolique côté Cinnamon, copié à l'installation).
+
+Une nouvelle mesure se collecte donc une seule fois, dans `sysstats.sh`, mais s'affiche dans les deux interfaces.
+
 ## Pourquoi pas ksystemstats ?
-Les capteurs `org.kde.ksysguard.sensors` donnent des valeurs erronées sur cette machine (température CPU à 0, usage NVIDIA qui renvoie la température, VRAM totale doublée). Le widget lit donc directement `/proc`, `/sys` et `nvidia-smi` via `package/contents/scripts/sysstats.sh`.
+Côté KDE, les capteurs `org.kde.ksysguard.sensors` donnent des valeurs erronées sur cette machine (température CPU à 0, usage NVIDIA qui renvoie la température, VRAM totale doublée). Le widget lit donc directement `/proc`, `/sys` et `nvidia-smi` via `sysstats.sh`, comme l'applet Cinnamon.

@@ -1,0 +1,172 @@
+{
+    "layout": {
+        "type": "layout",
+        "pages": ["general", "display", "storage"],
+        "general": {
+            "type": "page",
+            "title": "Général",
+            "sections": ["section-sources", "section-temperatures"]
+        },
+        "display": {
+            "type": "page",
+            "title": "Affichage",
+            "sections": ["section-panel", "section-popup", "section-behaviour"]
+        },
+        "storage": {
+            "type": "page",
+            "title": "Stockage",
+            "sections": ["section-disks", "section-tracked"]
+        },
+        "section-sources": {
+            "type": "section",
+            "title": "Relevé",
+            "keys": ["updateInterval", "gpuSource", "netInterface"]
+        },
+        "section-temperatures": {
+            "type": "section",
+            "title": "Températures",
+            "keys": ["warningTemp", "criticalTemp"]
+        },
+        "section-panel": {
+            "type": "section",
+            "title": "Panneau",
+            "keys": ["cpuPanel", "tempPanel", "ramPanel", "amountsPanel", "gpuPanel", "vramPanel", "netPanel", "diskPanel"]
+        },
+        "section-popup": {
+            "type": "section",
+            "title": "Popup",
+            "keys": ["cpuPopup", "tempPopup", "freqPopup", "threadsPopup", "ramPopup", "gpuPopup", "vramPopup", "netPopup", "diskPopup"]
+        },
+        "section-behaviour": {
+            "type": "section",
+            "title": "Mesures indisponibles",
+            "keys": ["autoHide"]
+        },
+        "section-disks": {
+            "type": "section",
+            "title": "Partitions détectées",
+            "keys": ["disksInfo", "diskPrefs"]
+        },
+        "section-tracked": {
+            "type": "section",
+            "title": "Dossiers et points de montage suivis",
+            "keys": ["trackedInfo", "customPaths", "folderRefresh"]
+        }
+    },
+
+    "updateInterval": {
+        "type": "spinbutton",
+        "default": 2000,
+        "min": 500,
+        "max": 10000,
+        "step": 250,
+        "units": "ms",
+        "description": "Intervalle"
+    },
+    "gpuSource": {
+        "type": "combobox",
+        "default": "auto",
+        "description": "Source GPU",
+        "options": {
+            "Automatique": "auto",
+            "NVIDIA (nvidia-smi)": "nvidia",
+            "AMD (sysfs)": "amd"
+        }
+    },
+    "netInterface": {
+        "type": "entry",
+        "default": "",
+        "description": "Interface réseau",
+        "tooltip": "Vide : interfaces physiques actives"
+    },
+    "warningTemp": {
+        "type": "spinbutton",
+        "default": 70,
+        "min": 30,
+        "max": 120,
+        "step": 1,
+        "units": "°C",
+        "description": "Seuil d'alerte"
+    },
+    "criticalTemp": {
+        "type": "spinbutton",
+        "default": 85,
+        "min": 30,
+        "max": 130,
+        "step": 1,
+        "units": "°C",
+        "description": "Seuil critique"
+    },
+
+    "cpuPanel": { "type": "switch", "default": true, "description": "CPU (utilisation)" },
+    "tempPanel": { "type": "switch", "default": true, "description": "Températures CPU et GPU" },
+    "ramPanel": { "type": "switch", "default": true, "description": "RAM" },
+    "amountsPanel": { "type": "switch", "default": true, "description": "Quantités RAM et VRAM (Gio)" },
+    "gpuPanel": { "type": "switch", "default": true, "description": "GPU (utilisation)" },
+    "vramPanel": { "type": "switch", "default": true, "description": "VRAM" },
+    "netPanel": { "type": "switch", "default": true, "description": "Réseau (débit ↓ / ↑)" },
+    "diskPanel": { "type": "switch", "default": true, "description": "Stockage" },
+
+    "cpuPopup": { "type": "switch", "default": true, "description": "CPU (utilisation)" },
+    "tempPopup": { "type": "switch", "default": true, "description": "Températures CPU et GPU" },
+    "freqPopup": { "type": "switch", "default": true, "description": "Fréquences CPU et GPU" },
+    "threadsPopup": { "type": "switch", "default": true, "description": "Threads CPU occupés (> 50 %)" },
+    "ramPopup": { "type": "switch", "default": true, "description": "RAM" },
+    "gpuPopup": { "type": "switch", "default": true, "description": "GPU (utilisation)" },
+    "vramPopup": { "type": "switch", "default": true, "description": "VRAM" },
+    "netPopup": { "type": "switch", "default": true, "description": "Réseau (débit ↓ / ↑)" },
+    "diskPopup": { "type": "switch", "default": true, "description": "Stockage" },
+
+    "autoHide": {
+        "type": "switch",
+        "default": true,
+        "description": "Masquer les mesures indisponibles sur ce PC (pas de GPU reconnu, pas de sonde…)"
+    },
+
+    "disksInfo": {
+        "type": "label",
+        "description": "Partitions locales, sans /boot. Les partages réseau (NFS, SMB) s'ajoutent plus bas comme point de montage."
+    },
+    "diskPrefs": {
+        "type": "list",
+        "description": "Partitions",
+        "columns": [
+            { "id": "mount", "title": "Point de montage", "type": "string" },
+            { "id": "panel", "title": "Panneau", "type": "boolean" },
+            { "id": "popup", "title": "Popup", "type": "boolean", "default": true }
+        ],
+        "default": []
+    },
+
+    "trackedInfo": {
+        "type": "label",
+        "description": "Point de montage : espace occupé du disque ou du partage qui contient ce chemin. Dossier : taille de son contenu (du, sans traverser d'autres montages), calculée en arrière-plan, en pourcentage du disque qui le contient ou de son quota."
+    },
+    "customPaths": {
+        "type": "list",
+        "description": "Chemins suivis",
+        "columns": [
+            { "id": "path", "title": "Chemin", "type": "file", "select-dir": true },
+            { "id": "quota", "title": "Quota (dossiers, 0 = % du disque)", "type": "integer", "default": 0, "min": 0, "max": 100000, "units": "Gio" },
+            { "id": "panel", "title": "Panneau", "type": "boolean" },
+            { "id": "popup", "title": "Popup", "type": "boolean", "default": true },
+            {
+                "id": "kind",
+                "title": "Type",
+                "type": "string",
+                "default": "folder",
+                "options": { "Dossier": "folder", "Point de montage": "mount" }
+            }
+        ],
+        "default": []
+    },
+    "folderRefresh": {
+        "type": "spinbutton",
+        "default": 5,
+        "min": 1,
+        "max": 1440,
+        "step": 1,
+        "units": "min",
+        "description": "Recalculer la taille des dossiers toutes les"
+    }
+}

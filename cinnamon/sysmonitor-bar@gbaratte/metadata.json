@@ -1,0 +1,10 @@
+{
+    "uuid": "sysmonitor-bar@gbaratte",
+    "name": "System Monitor Bar",
+    "description": "CPU, GPU, RAM et VRAM (usage et températures), réseau et stockage dans le panneau",
+    "icon": "utilities-system-monitor",
+    "version": "1.0",
+    "author": "Guillaume Baratte",
+    "max-instances": -1,
+    "cinnamon-version": ["5.8"]
+}

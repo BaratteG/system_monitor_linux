@@ -1,0 +1,47 @@
+/* Panel */
+.sysmon-panel { spacing: 10px; }
+.sysmon-name, .sysmon-unit, .sysmon-rate-unit, .sysmon-caption, .sysmon-detail { font-size: 0.8em; }
+.sysmon-name { letter-spacing: 1px; }
+.sysmon-percent { min-width: 1.9em; }
+.sysmon-percent-unit { min-width: 0.9em; }
+.sysmon-temp { min-width: 2.2em; }
+.sysmon-amount { min-width: 2em; }
+.sysmon-rate { min-width: 1.8em; }
+.sysmon-rate-unit { min-width: 0.9em; }
+.sysmon-rates { spacing: 6px; }
+.sysmon-bar { height: 2px; margin-top: 2px; }
+.sysmon-separator { width: 1px; height: 16px; background-color: rgba(128, 128, 128, 0.4); }
+.sysmon-separator-vertical { width: 24px; height: 1px; background-color: rgba(128, 128, 128, 0.4); }
+
+/* Popup */
+.sysmon-popup { width: 460px; spacing: 10px; padding: 0 10px; }
+.sysmon-card {
+    spacing: 10px;
+    padding: 10px;
+    border: 1px solid rgba(128, 128, 128, 0.18);
+    border-radius: 8px;
+    background-color: rgba(128, 128, 128, 0.10);
+}
+.sysmon-card-header { spacing: 8px; }
+.sysmon-card-body { spacing: 14px; }
+.sysmon-title { font-weight: bold; }
+.sysmon-pill {
+    spacing: 6px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background-color: rgba(128, 128, 128, 0.18);
+}
+.sysmon-dot { width: 7px; height: 7px; border-radius: 4px; }
+.sysmon-gauge { spacing: 3px; min-width: 78px; }
+.sysmon-dial { width: 72px; height: 72px; }
+.sysmon-big-number { font-size: 1.5em; font-weight: bold; }
+.sysmon-sparkline { spacing: 4px; min-width: 110px; }
+.sysmon-sparkline-area { min-height: 48px; }
+.sysmon-rate-stats { spacing: 10px; min-width: 170px; }
+.sysmon-legend { spacing: 6px; }
+.sysmon-mark { width: 8px; height: 8px; border-radius: 2px; }
+.sysmon-disk-row { spacing: 10px; }
+.sysmon-disk-name { width: 90px; }
+.sysmon-disk-amount { min-width: 110px; }
+.sysmon-disk-percent { min-width: 42px; }
+.sysmon-bar-large { height: 6px; }

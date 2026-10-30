@@ -1,0 +1,1 @@
+../../package/contents/scripts/sysstats.sh
