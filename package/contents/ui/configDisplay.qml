@@ -63,13 +63,13 @@ ColumnLayout {
         QQC2.CheckBox { id: vramPanel; Layout.alignment: Qt.AlignHCenter }
         QQC2.CheckBox { id: vramPopup; Layout.alignment: Qt.AlignHCenter }
 
-        QQC2.Label { text: i18n("Stockage") }
-        QQC2.CheckBox { id: diskPanel; Layout.alignment: Qt.AlignHCenter }
-        QQC2.CheckBox { id: diskPopup; Layout.alignment: Qt.AlignHCenter }
-
         QQC2.Label { text: i18n("Réseau (débit ↓ / ↑)") }
         QQC2.CheckBox { id: netPanel; Layout.alignment: Qt.AlignHCenter }
         QQC2.CheckBox { id: netPopup; Layout.alignment: Qt.AlignHCenter }
+
+        QQC2.Label { text: i18n("Stockage") }
+        QQC2.CheckBox { id: diskPanel; Layout.alignment: Qt.AlignHCenter }
+        QQC2.CheckBox { id: diskPopup; Layout.alignment: Qt.AlignHCenter }
     }
 
     QQC2.Label {

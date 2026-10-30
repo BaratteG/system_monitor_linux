@@ -3,9 +3,9 @@
 Widget (plasmoid) KDE Plasma 5.27 pour le panneau : CPU, RAM, GPU et VRAM (usage et températures), stockage (partitions, dossiers, partages réseau) et débit réseau descendant et montant.
 
 ## Fonctionnalités
-- Affichage compact en groupes : `CPU 12% 45°  RAM 15% 9.1/60G  |  GPU 3% 44°  VRAM 18% 5.9/32G  |  / 25%  home 40%  |  NET ↓1.2M ↑45K`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
+- Affichage compact en groupes : `CPU 12% 45°  RAM 15% 9.1/60G  |  GPU 3% 44°  VRAM 18% 5.9/32G  |  NET ↓1.2M ↑45K  |  / 25%  home 40%`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
 - Températures colorées selon des seuils (alerte 70 °C, critique 85 °C par défaut).
-- Clic : popup avec les cartes Processeur (avec le nom du CPU), Carte graphique, Stockage et Réseau. Processeur et Carte graphique : jauges circulaires (avec la fréquence CPU moyenne et l'horloge GPU), pastille de température et historique d'utilisation (≈ 2 min).
+- Clic : popup avec les cartes Processeur (avec le nom du CPU), Carte graphique, Réseau et Stockage. Processeur et Carte graphique : jauges circulaires (avec la fréquence CPU moyenne et l'horloge GPU), pastille de température et historique d'utilisation (≈ 2 min).
 - Stockage :
   - partitions locales détectées automatiquement (`df -l`, sans `/boot` ni doublons de volume) ;
   - points de montage ajoutés à la main, y compris les partages réseau (NFS, SMB) : espace occupé du système de fichiers qui contient le chemin ;

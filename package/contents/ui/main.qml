@@ -276,20 +276,22 @@ Item {
                 .replace(/\s+/g, " ").trim()
     }
     // disk sizes: used and total share the unit of the total, so the two
-    // numbers compare at a glance (Gio up to 10 Tio, Tio above)
-    function diskUnitTio(totalMib) { return totalMib >= 10 * 1024 * 1024 }
+    // numbers compare at a glance (Gio below 1024 Gio, Tio from there)
+    function diskUnitTio(totalMib) { return totalMib >= 1024 * 1024 }
     function sizeNum(mib, totalMib) {
         var g = mib / 1024
-        if (diskUnitTio(totalMib)) return (g / 1024).toFixed(1)
+        // two decimals below 10 Tio, so "0.35 / 1.30" keeps Gio-level detail
+        if (diskUnitTio(totalMib)) return (g / 1024).toFixed(totalMib < 10 * 1024 * 1024 ? 2 : 1)
         return g < 99.95 ? g.toFixed(1) : Math.round(g).toString()
     }
     function sizeText(mib) { return sizeNum(mib, mib) + (diskUnitTio(mib) ? " Tio" : " Gio") }
-    // panel size: "42.0G" below 1000 Gio, "1.3T" above
+    // panel size: "42.0G" below 1024 Gio, "1.3T" from there
     function sizeShortNum(mib) {
         var g = mib / 1024
-        return g < 999.5 ? (g < 99.95 ? g.toFixed(1) : Math.round(g).toString()) : (g / 1024).toFixed(1)
+        if (diskUnitTio(mib)) return (g / 1024).toFixed(1)
+        return g < 99.95 ? g.toFixed(1) : Math.round(g).toString()
     }
-    function sizeShortUnit(mib) { return mib / 1024 < 999.5 ? "G" : "T" }
+    function sizeShortUnit(mib) { return diskUnitTio(mib) ? "T" : "G" }
     function sizeShort(mib) { return sizeShortNum(mib) + sizeShortUnit(mib) }
     function gio(mib) { return (mib / 1024).toFixed(1) }
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
@@ -358,10 +360,10 @@ Item {
         if (popupRam) lines.push("RAM  " + num(ramPct) + " % · " + ramDetail())
         if (popupGpu) lines.push("GPU  " + num(gpuPct) + " %" + t(popupGpuTemp, gpuTemp) + f(gpuFreq))
         if (popupVram) lines.push("VRAM  " + num(vramPct) + " % · " + vramDetail())
+        if (popupNet) lines.push("Réseau  ↓ " + rateText(netDown) + " · ↑ " + rateText(netUp))
         if (popupDisk) lines.push("Stockage  " + popupDisks.map(function (d) {
             return d.short + " " + (d.pct >= 0 ? Math.round(d.pct) + " %" : (d.size >= 0 ? sizeShort(d.size) : "--"))
         }).join(" · "))
-        if (popupNet) lines.push("Réseau  ↓ " + rateText(netDown) + " · ↑ " + rateText(netUp))
         return lines.join("\n")
     }
 
@@ -666,7 +668,17 @@ Item {
             }
 
             Rectangle {
-                visible: root.panelDisk && (compact.systemGroup || compact.gpuGroup)
+                visible: root.panelNet && (compact.systemGroup || compact.gpuGroup)
+                width: compact.vertical ? compact.width * 0.5 : 1
+                height: compact.vertical ? 1 : compact.height * 0.5
+                color: PlasmaCore.Theme.textColor
+                opacity: 0.18
+            }
+
+            NetCell { visible: root.panelNet }
+
+            Rectangle {
+                visible: root.panelDisk && (compact.systemGroup || compact.gpuGroup || root.panelNet)
                 width: compact.vertical ? compact.width * 0.5 : 1
                 height: compact.vertical ? 1 : compact.height * 0.5
                 color: PlasmaCore.Theme.textColor
@@ -677,16 +689,6 @@ Item {
                 model: root.panelDisk ? root.panelDisks : []
                 delegate: DiskCell { item: modelData }
             }
-
-            Rectangle {
-                visible: root.panelNet && (compact.systemGroup || compact.gpuGroup || root.panelDisk)
-                width: compact.vertical ? compact.width * 0.5 : 1
-                height: compact.vertical ? 1 : compact.height * 0.5
-                color: PlasmaCore.Theme.textColor
-                opacity: 0.18
-            }
-
-            NetCell { visible: root.panelNet }
         }
     }
 
@@ -1214,8 +1216,8 @@ Item {
             historyCaption: "GPU · " + full.historySpan
         }
 
-        DiskCard { visible: root.popupDisk }
-
         NetCard { visible: root.popupNet }
+
+        DiskCard { visible: root.popupDisk }
     }
 }

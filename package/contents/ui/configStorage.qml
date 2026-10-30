@@ -56,9 +56,14 @@ ColumnLayout {
         }
     }
 
-    function gio(kib) {
-        var g = kib / 1048576
-        return g < 99.95 ? g.toFixed(1) : Math.round(g).toString()
+    // "used / total unit", both in the unit of the total (Tio from 1024 Gio)
+    function sizeText(used, total) {
+        if (total >= 1073741824) {
+            var d = total < 10 * 1073741824 ? 2 : 1
+            return (used / 1073741824).toFixed(d) + " / " + (total / 1073741824).toFixed(d) + " Tio"
+        }
+        function g(kib) { var v = kib / 1048576; return v < 99.95 ? v.toFixed(1) : Math.round(v).toString() }
+        return g(used) + " / " + g(total) + " Gio"
     }
 
     // ---- tracked folders and mount points ----
@@ -121,7 +126,7 @@ ColumnLayout {
             delegate: QQC2.Label {
                 Layout.row: index + 1; Layout.column: 1
                 opacity: 0.7
-                text: page.gio(modelData.used) + " / " + page.gio(modelData.total) + " Gio"
+                text: page.sizeText(modelData.used, modelData.total)
             }
         }
         Repeater {
