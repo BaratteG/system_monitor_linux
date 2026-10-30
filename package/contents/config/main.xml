@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="updateInterval" type="Int"><default>2000</default><min>500</min><max>10000</max></entry>
+    <entry name="gpuSource" type="String"><default>auto</default></entry>
+    <entry name="showCpu" type="Bool"><default>true</default></entry>
+    <entry name="showGpu" type="Bool"><default>true</default></entry>
+    <entry name="showRam" type="Bool"><default>true</default></entry>
+    <entry name="showVram" type="Bool"><default>true</default></entry>
+    <entry name="showNet" type="Bool"><default>true</default></entry>
+    <entry name="netInterface" type="String"><default></default></entry>
+    <entry name="showTemperatures" type="Bool"><default>true</default></entry>
+    <entry name="autoHide" type="Bool"><default>true</default></entry>
+    <entry name="warningTemp" type="Int"><default>70</default></entry>
+    <entry name="criticalTemp" type="Int"><default>85</default></entry>
+  </group>
+</kcfg>

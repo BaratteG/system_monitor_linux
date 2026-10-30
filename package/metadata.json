@@ -1,0 +1,22 @@
+{
+    "KPlugin": {
+        "Id": "org.gbaratte.sysmonitor",
+        "Name": "System Monitor Bar",
+        "Description": "CPU, GPU, RAM et VRAM (usage et températures) dans le panneau",
+        "Icon": "utilities-system-monitor",
+        "Authors": [
+            {
+                "Name": "Guillaume Baratte",
+                "Email": "guillaumebaratte@gmail.com"
+            }
+        ],
+        "Category": "System Information",
+        "Version": "1.0",
+        "License": "GPL-2.0+",
+        "EnabledByDefault": true,
+        "Website": ""
+    },
+    "X-Plasma-API": "declarativeappletscript",
+    "X-Plasma-MainScript": "ui/main.qml",
+    "KPackageStructure": "Plasma/Applet"
+}
