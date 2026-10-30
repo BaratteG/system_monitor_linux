@@ -48,7 +48,7 @@ ColumnLayout {
         QQC2.Label { text: "—"; opacity: 0.5; Layout.alignment: Qt.AlignHCenter }
         QQC2.CheckBox { id: freqPopup; Layout.alignment: Qt.AlignHCenter }
 
-        QQC2.Label { text: i18n("Threads CPU occupés (> 50 %)") }
+        QQC2.Label { text: i18n("Usage de chaque thread CPU (blocs)") }
         QQC2.Label { text: "—"; opacity: 0.5; Layout.alignment: Qt.AlignHCenter }
         QQC2.CheckBox { id: threadsPopup; Layout.alignment: Qt.AlignHCenter }
 

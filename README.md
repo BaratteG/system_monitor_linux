@@ -5,7 +5,10 @@ Widget de panneau pour **KDE Plasma 5.27** (plasmoid) et **Cinnamon 5.8** (apple
 ## Fonctionnalités
 - Affichage compact en groupes : `CPU 12% 45°  RAM 15% 9.1/60G  |  GPU 3% 44°  VRAM 18% 5.9/32G  |  NET ↓1.2M ↑45K  |  / 25%  home 40%`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
 - Températures colorées selon des seuils (alerte 70 °C, critique 85 °C par défaut).
-- Clic : popup avec les cartes Processeur (avec le nom du CPU), Carte graphique, Réseau et Stockage. Processeur et Carte graphique : jauges circulaires (avec la fréquence CPU moyenne, le nombre de threads CPU occupés à plus de 50 % et l'horloge GPU), pastille de température et historique d'utilisation (≈ 2 min).
+- Clic : popup avec les cartes Processeur (avec le nom du CPU), Carte graphique, Réseau et Stockage. Processeur et Carte graphique : jauges circulaires (avec la fréquence CPU moyenne, l'horloge GPU, et sous la jauge CPU un petit bloc par thread matériel coloré selon son usage, creux sous 1 % ; le nombre de threads occupés à plus de 50 % reste dans l'infobulle du widget), pastille de température et historique d'utilisation en courbes lissées (≈ 2 min). Le bouton à droite de la légende du graphe CPU le remplace par un mini-graphe par thread (échelle 0-100 %), comme les processeurs logiques du Gestionnaire des tâches de Windows ; le choix est mémorisé.
+- Fenêtre flottante : le bouton en haut du popup le détache dans une fenêtre qui reste ouverte et garde sa position, même après un redémarrage du bureau. Le clic sur le widget l'affiche ou la masque ; la fermer revient au popup. Sous KDE c'est une vraie fenêtre, sous Cinnamon un panneau déplaçable au-dessus des fenêtres.
+- Processus : la flèche des cartes Processeur et Carte graphique déplie un panneau latéral avec les 60 processus les plus actifs (nom, PID, usage, mémoire), rafraîchi uniquement tant qu'il est ouvert. L'usage CPU est en pourcentage de toute la machine, comme la jauge. Sur NVIDIA, la liste GPU vient de `nvidia-smi pmon` ; sur AMD, de `/proc/*/fdinfo` (noyau récent, processus de l'utilisateur seulement).
+- Fin de tâche : dans la liste CPU, sélectionner une ligne puis « Fin de tâche » envoie SIGTERM. Si le processus est toujours là 3 s plus tard, le bouton devient « Forcer l'arrêt » (SIGKILL). Les processus d'autres utilisateurs et ceux dont dépend la session (`plasmashell`, `kwin`, `cinnamon`, `Xorg`...) sont protégés. La liste n'est pas regroupée par application : arrêter un processus d'un navigateur ne ferme pas forcément tout le navigateur.
 - Stockage :
   - partitions locales détectées automatiquement (`df -l`, sans `/boot` ni doublons de volume) ;
   - points de montage ajoutés à la main, y compris les partages réseau (NFS, SMB) : espace occupé du système de fichiers qui contient le chemin ;
@@ -41,15 +44,16 @@ kquitapp5 plasmashell && kstart5 plasmashell
 ## Configuration
 Clic droit sur le widget > Configurer (Cinnamon : « Configurer… ») :
 - **Général** : intervalle (500-10000 ms, défaut 2000), source GPU (auto/nvidia/amd), interface réseau (vide = auto), seuils de température d'alerte et critique.
-- **Affichage** : pour chaque mesure (CPU, températures, fréquences, threads occupés, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
+- **Affichage** : pour chaque mesure (CPU, températures, fréquences, blocs d'usage des threads, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
 - **Stockage** : partitions détectées à afficher dans le panneau et/ou le popup (par défaut `/` dans le panneau, toutes dans le popup) ; dossiers et points de montage suivis (chemin, quota optionnel pour les dossiers, panneau / popup) ; fréquence de recalcul de la taille des dossiers.
 
 Sous Cinnamon, les partitions détectées s'ajoutent toutes seules à la liste de l'onglet Stockage, et Panneau / Popup se cochent directement dans les listes. Les réglages sont propres à chaque instance de l'applet.
 
 ## Organisation du dépôt
 - `package/` : plasmoid KDE (QML).
-- `cinnamon/sysmonitor-bar@gbaratte/` : applet Cinnamon (`stats.js` pour les données, `panelView.js` et `popupView.js` pour l'affichage).
+- `cinnamon/sysmonitor-bar@gbaratte/` : applet Cinnamon (`stats.js` pour les données, `panelView.js`, `popupView.js`, `processPanel.js` et `floatWindow.js` pour l'affichage).
 - `package/contents/scripts/sysstats.sh` : relevé des mesures, commun aux deux bureaux (lien symbolique côté Cinnamon, copié à l'installation).
+- `package/contents/scripts/procstats.sh` : liste des processus et liste des processus protégés, communes aux deux bureaux de la même façon.
 
 Une nouvelle mesure se collecte donc une seule fois, dans `sysstats.sh`, mais s'affiche dans les deux interfaces.
 

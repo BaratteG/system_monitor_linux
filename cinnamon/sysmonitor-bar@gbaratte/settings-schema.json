@@ -110,7 +110,7 @@
     "cpuPopup": { "type": "switch", "default": true, "description": "CPU (utilisation)" },
     "tempPopup": { "type": "switch", "default": true, "description": "Températures CPU et GPU" },
     "freqPopup": { "type": "switch", "default": true, "description": "Fréquences CPU et GPU" },
-    "threadsPopup": { "type": "switch", "default": true, "description": "Threads CPU occupés (> 50 %)" },
+    "threadsPopup": { "type": "switch", "default": true, "description": "Usage de chaque thread CPU (blocs)" },
     "ramPopup": { "type": "switch", "default": true, "description": "RAM" },
     "gpuPopup": { "type": "switch", "default": true, "description": "GPU (utilisation)" },
     "vramPopup": { "type": "switch", "default": true, "description": "VRAM" },
@@ -168,5 +168,10 @@
         "step": 1,
         "units": "min",
         "description": "Recalculer la taille des dossiers toutes les"
-    }
+    },
+
+    "floating": { "type": "generic", "default": false },
+    "floatX": { "type": "generic", "default": -1 },
+    "floatY": { "type": "generic", "default": -1 },
+    "threadGraph": { "type": "generic", "default": false }
 }

@@ -1,11 +1,15 @@
-// Popup content: Processeur, Carte graphique, Réseau and Stockage cards.
-const { Pango, St } = imports.gi;
+// Popup content: Processeur, Carte graphique, Réseau and Stockage cards, and the
+// process panel that unfolds on their right.
+const { Cinnamon, Clutter, Pango, St } = imports.gi;
 const Tooltips = imports.ui.tooltips;
 
 const Stats = require('./stats.js');
+const { ProcessPanel } = require('./processPanel.js');
 const { FixedLabel, Gauge, Sparkline, UsageBar, hexAlpha, label } = require('./widgets.js');
 
 const FILL = { expand: true, x_fill: true, y_fill: true };
+
+const PROCESS_PANEL_WIDTH = 360;
 
 function header(title) {
     const box = new St.BoxLayout({ style_class: 'sysmon-card-header' });
@@ -19,9 +23,10 @@ function subtitleLabel() {
     return actor;
 }
 
-// title, subtitle, temperature pill, two gauges and the usage history
+// title, subtitle, temperature pill, process list arrow, two gauges and the usage history;
+// onThreadGraph(): the history gets a button swapping the curve for one graph per thread
 class Card {
-    constructor(title) {
+    constructor(title, onArrow, onThreadGraph = null) {
         this.actor = new St.BoxLayout({ vertical: true, style_class: 'sysmon-card' });
 
         const head = header(title);
@@ -33,19 +38,23 @@ class Card {
         this._pill.add(this._dot, { y_fill: false, y_align: St.Align.MIDDLE });
         this._pill.add(this._temp, { y_fill: false, y_align: St.Align.MIDDLE });
         head.add(this._pill, { y_fill: false, y_align: St.Align.MIDDLE });
+        this._arrow = new St.Button({ style_class: 'sysmon-arrow', label: '▸' });
+        this._arrow.connect('clicked', () => onArrow());
+        head.add(this._arrow, { y_fill: false, y_align: St.Align.MIDDLE });
         this.actor.add(head, { x_fill: true });
 
         const body = new St.BoxLayout({ style_class: 'sysmon-card-body' });
         this._a = new Gauge();
         this._b = new Gauge();
-        this._history = new Sparkline();
+        this._history = new Sparkline({ onToggle: onThreadGraph });
         body.add(this._a.actor);
         body.add(this._b.actor);
         body.add(this._history.actor, FILL);
         this.actor.add(body, { x_fill: true });
     }
 
-    update({ subtitle, showTemp, temp, a, b, history, caption }, cfg) {
+    // threadHistory / threadView: only for the card that has the button
+    update({ subtitle, showTemp, temp, a, b, history, caption, threadHistory, threadView }, cfg) {
         this._subtitle.text = subtitle;
         this._pill.visible = showTemp;
         const dot = Stats.valid(temp) ? Stats.tempDotColor(temp, cfg) : 'rgba(128, 128, 128, 0.5)';
@@ -58,7 +67,12 @@ class Card {
         this._b.actor.visible = b.visible;
         this._b.update(b);
         this._history.update(history);
+        if (threadHistory) this._history.setThreads(threadHistory, threadView);
         this._history.caption = caption;
+    }
+
+    set expanded(expanded) {
+        this._arrow.label = expanded ? '◂' : '▸';
     }
 }
 
@@ -202,20 +216,109 @@ class DiskCard {
 }
 
 class PopupView {
-    constructor() {
-        this.actor = new St.BoxLayout({ vertical: true, style_class: 'sysmon-popup' });
-        this._cpu = new Card('Processeur');
-        this._gpu = new Card('Carte graphique');
+    // tasks: Stats.EndTask; onProcessKind() is called when the process list changes
+    constructor(tasks, { onDetach, onProcessKind, onEndTask, onScrollbarDrag, onThreadGraph }) {
+        this._onProcessKind = onProcessKind;
+        this._tasks = tasks;
+        this._processKind = null;   // "cpu", "gpu" or null: panel folded
+
+        // The process list scrolls: only the cards may decide the height, which a
+        // St.BoxLayout would not do. The menu follows the size changes by itself
+        // (PopupMenu._allocationChanged), including on the edge of a screen.
+        this.actor = new Cinnamon.GenericContainer();
+        this.actor.connect('get-preferred-width', (actor, forHeight, alloc) => this._getWidth(alloc));
+        this.actor.connect('get-preferred-height', (actor, forWidth, alloc) => this._getHeight(alloc));
+        this.actor.connect('allocate', (actor, box, flags) => this._allocate(box, flags));
+
+        this._content = new St.BoxLayout({ vertical: true, style_class: 'sysmon-popup' });
+        this.actor.add_actor(this._content);
+
+        const detach = new St.Button({ style_class: 'sysmon-icon-button', label: '↗' });
+        this._detachTooltip = new Tooltips.Tooltip(detach, 'Détacher dans une fenêtre');
+        detach.connect('clicked', () => onDetach());
+        this._toolbar = new St.Bin({ x_align: St.Align.END, x_fill: false, child: detach });
+        this._content.add(this._toolbar, { x_fill: true });
+
+        this._cpu = new Card('Processeur', () => this._toggleProcesses('cpu'), onThreadGraph);
+        this._gpu = new Card('Carte graphique', () => this._toggleProcesses('gpu'));
         this._net = new NetCard();
         this._disk = new DiskCard();
         for (const card of [this._cpu, this._gpu, this._net, this._disk]) {
-            this.actor.add(card.actor, { x_fill: true });
+            this._content.add(card.actor, { x_fill: true });
         }
+
+        this._processes = new ProcessPanel(tasks, { onEndTask, onScrollbarDrag });
+        this._processes.actor.hide();
+        this.actor.add_actor(this._processes.actor);
+    }
+
+    get processKind() { return this._processKind; }
+
+    set floating(floating) {
+        this._toolbar.visible = !floating;
+    }
+
+    setProcesses(list) {
+        this._processes.update(list);
+    }
+
+    updateTasks() {
+        this._processes.updateTasks();
+    }
+
+    _sideWidth() {
+        return this._processKind ? PROCESS_PANEL_WIDTH * global.ui_scale : 0;
+    }
+
+    _getWidth(alloc) {
+        const [min, natural] = this._content.get_preferred_width(-1);
+        alloc.min_size = min + this._sideWidth();
+        alloc.natural_size = natural + this._sideWidth();
+    }
+
+    _getHeight(alloc) {
+        const [, width] = this._content.get_preferred_width(-1);
+        [alloc.min_size, alloc.natural_size] = this._content.get_preferred_height(width);
+    }
+
+    _allocate(box, flags) {
+        const [, width] = this._content.get_preferred_width(-1);
+        const side = this._sideWidth();
+        const child = new Clutter.ActorBox();
+        child.x1 = box.x1;
+        child.y1 = box.y1;
+        child.x2 = box.x1 + Math.min(width, box.x2 - box.x1 - side);
+        child.y2 = box.y2;
+        this._content.allocate(child, flags);
+        if (side > 0) {
+            child.x1 = child.x2;
+            child.x2 = child.x1 + side;
+            this._processes.actor.allocate(child, flags);
+        }
+    }
+
+    // same arrow: fold; the other one: switch list
+    _toggleProcesses(kind) {
+        this._setProcessKind(kind === this._processKind ? null : kind);
+    }
+
+    _setProcessKind(kind) {
+        this._processKind = kind;
+        this._cpu.expanded = kind === 'cpu';
+        this._gpu.expanded = kind === 'gpu';
+        // the selection doesn't outlive the list it was made in
+        this._tasks.setList([]);
+        this._processes.actor.visible = kind !== null;
+        if (kind) this._processes.setKind(kind);
+        this.actor.queue_relayout();
+        this._onProcessKind();
     }
 
     update(stats, show, cfg) {
         const span = Stats.historySpan(cfg.updateInterval);
         const usage = v => Stats.usageColor(v);
+        // the graph per thread needs data: until then the total curve stays
+        const threadView = cfg.threadGraph && stats.threadHistory.length > 0;
 
         this._cpu.actor.visible = show.popupCpu || show.popupRam;
         this._cpu.update({
@@ -225,14 +328,16 @@ class PopupView {
             a: {
                 visible: show.popupCpu, caption: 'CPU', value: stats.cpuPct, color: usage(stats.cpuPct),
                 detail: show.popupFreq ? Stats.freqDetail(stats.cpuFreq, cfg) : ' ',
-                detail2: show.popupThreads ? stats.threadsText() : '',
+                threads: show.popupThreads ? stats.threadPct : [],
             },
             b: {
                 visible: show.popupRam, caption: 'RAM', value: stats.ramPct, color: usage(stats.ramPct),
                 detail: stats.ramDetail(),
             },
             history: stats.cpuHistory,
-            caption: 'CPU · ' + span,
+            threadHistory: stats.threadHistory,
+            threadView,
+            caption: (threadView ? 'Threads · ' : 'CPU · ') + span,
         }, cfg);
 
         this._gpu.actor.visible = show.popupGpu || show.popupVram;
@@ -257,6 +362,10 @@ class PopupView {
 
         this._disk.actor.visible = show.popupDisk;
         this._disk.update(show.popupDisks);
+
+        // its arrow is gone: nothing could fold the panel any more
+        const owner = { cpu: this._cpu, gpu: this._gpu }[this._processKind];
+        if (owner && !owner.actor.visible) this._setProcessKind(null);
     }
 }
 

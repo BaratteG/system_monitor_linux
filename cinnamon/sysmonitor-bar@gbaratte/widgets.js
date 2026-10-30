@@ -1,8 +1,11 @@
 // Small building blocks shared by the panel and the popup.
 const Cairo = imports.cairo;
 const { Clutter, Pango, St } = imports.gi;
+const Tooltips = imports.ui.tooltips;
 
-const { COLORS, HISTORY_LENGTH, num } = require('./stats.js');
+const {
+    COLORS, HISTORY_LENGTH, THREAD_BLOCKS_WIDTH, num, threadBlockLayout, threadGridColumns, usageColor,
+} = require('./stats.js');
 
 function rgb(hex) {
     return [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255);
@@ -104,22 +107,67 @@ class Gauge {
 
         this._caption = label('', 'sysmon-caption', 0.6);
         this._detail = label('', 'sysmon-detail', 0.8);
-        this._detail2 = label('', 'sysmon-detail', 0.8);
-        for (const line of [this._caption, this._detail, this._detail2]) {
+        for (const line of [this._caption, this._detail]) {
             this.actor.add(line, { x_fill: false, x_align: St.Align.MIDDLE });
         }
+
+        // one block per hardware thread, on a single surface; sized when their number changes
+        this._threads = [];
+        this._blocks = new St.DrawingArea();
+        this._blocks.connect('repaint', area => this._paintBlocks(area));
+        this._blocks.hide();
+        this.actor.add(this._blocks, { x_fill: false, x_align: St.Align.MIDDLE });
     }
 
-    update({ value, color, caption, detail = '', detail2 = '' }) {
+    // threads: % of each hardware thread, [] for none
+    update({ value, color, caption, detail = '', threads = [] }) {
         this._number.text = num(value);
         this._caption.text = caption;
         this._detail.text = detail;
         this._detail.visible = detail !== '';
-        this._detail2.text = detail2;
-        this._detail2.visible = detail2 !== '';
         this._value = value;
         this._color = color;
         this._ring.queue_repaint();
+        this._updateBlocks(threads);
+    }
+
+    _updateBlocks(threads) {
+        const previous = this._threads;
+        this._threads = threads;
+        this._blocks.visible = threads.length > 0;
+        if (threads.length === 0) return;
+        if (threads.length !== previous.length) {
+            const { height } = threadBlockLayout(threads.length, THREAD_BLOCKS_WIDTH);
+            this._blocks.style = `width: ${THREAD_BLOCKS_WIDTH}px; height: ${height}px;`;
+        }
+        if (threads.some((v, i) => v !== previous[i])) this._blocks.queue_repaint();
+    }
+
+    // below 1 % (or no data yet) the block is hollow: a 1 px outline of the same outer size,
+    // on whole pixels so that it stays sharp
+    _paintBlocks(area) {
+        const cr = area.get_context();
+        const [w] = area.get_surface_size();
+        const scale = global.ui_scale;
+        const layout = threadBlockLayout(this._threads.length, THREAD_BLOCKS_WIDTH);
+        const size = Math.round(layout.size * scale), gap = Math.max(1, Math.round(layout.gap * scale));
+        const step = size + gap;
+        const x0 = Math.max(0, Math.round((w - (layout.cols * step - gap)) / 2));
+        const [fr, fg, fb] = foreground(area);
+        cr.setLineWidth(1);
+        this._threads.forEach((v, i) => {
+            const x = x0 + (i % layout.cols) * step, y = Math.floor(i / layout.cols) * step;
+            if (v >= 1) {
+                cr.setSourceRGB(...rgb(usageColor(v)));
+                cr.rectangle(x, y, size, size);
+                cr.fill();
+            } else {
+                cr.setSourceRGBA(fr, fg, fb, 0.35);
+                cr.rectangle(x + 0.5, y + 0.5, size - 1, size - 1);
+                cr.stroke();
+            }
+        });
+        cr.$dispose();
     }
 
     _paint(area) {
@@ -146,21 +194,63 @@ class Gauge {
     }
 }
 
+// Adds the curve of a history to the path: the points are at x0 + i * step, at the height yOf(v[i]).
+// Each segment is a cubic Bézier whose two control points are halfway in x, at the height of each
+// end: the curve never goes beyond its neighbouring values (no dip under 0, no peak over 100 %).
+// join: continue the current path instead of starting a new one. Under 2 px between two points the
+// curve would bring nothing and cost thousands of segments: straight lines then.
+function tracePath(cr, v, x0, step, yOf, join) {
+    let px = x0, py = yOf(v[0]);
+    if (join) cr.lineTo(px, py);
+    else cr.moveTo(px, py);
+    for (let i = 1; i < v.length; i++) {
+        const x = x0 + i * step, y = yOf(v[i]);
+        if (step >= 2) {
+            const xm = (px + x) / 2;
+            cr.curveTo(xm, py, xm, y, x, y);
+        } else {
+            cr.lineTo(x, y);
+        }
+        px = x;
+        py = y;
+    }
+}
+
 // area sparkline of a history (one or two series, single y-axis).
 // maxValue > 0: fixed scale (percent); 0: auto-scale to the peak.
+//
+// onToggle(): adds a button on the legend line that swaps the curve for one mini graph per
+// thread (setThreads()); both surfaces take the same room, so nothing moves.
 class Sparkline {
-    constructor({ color = COLORS.highlight, color2 = COLORS.up, maxValue = 100, minScale = 1 } = {}) {
+    constructor({
+        color = COLORS.highlight, color2 = COLORS.up, maxValue = 100, minScale = 1, onToggle = null,
+    } = {}) {
         this._series = [[], []];
         this._colors = [color, color2];
         this._maxValue = maxValue;
         this._minScale = minScale;
+        this._threads = [];
+        this._threadMode = false;
 
         this.actor = new St.BoxLayout({ vertical: true, style_class: 'sysmon-sparkline' });
+        const legend = new St.BoxLayout();
         this._caption = label('', 'sysmon-caption', 0.6);
-        this.actor.add(this._caption);
+        legend.add(this._caption, { expand: true, y_fill: false, y_align: St.Align.MIDDLE });
+        if (onToggle) {
+            this._toggle = new St.Button({ style_class: 'sysmon-icon-button sysmon-caption', label: '▦' });
+            this._toggleTooltip = new Tooltips.Tooltip(this._toggle, '');
+            this._toggle.connect('clicked', () => onToggle());
+            this._toggle.hide();
+            legend.add(this._toggle, { y_fill: false, y_align: St.Align.MIDDLE });
+        }
+        this.actor.add(legend, { x_fill: true });
         this._area = new St.DrawingArea({ style_class: 'sysmon-sparkline-area' });
         this._area.connect('repaint', area => this._paint(area));
         this.actor.add(this._area, { expand: true, x_fill: true, y_fill: true });
+        this._grid = new St.DrawingArea({ style_class: 'sysmon-sparkline-area' });
+        this._grid.connect('repaint', area => this._paintThreads(area));
+        this._grid.hide();
+        this.actor.add(this._grid, { expand: true, x_fill: true, y_fill: true });
     }
 
     get chartMax() {
@@ -170,7 +260,23 @@ class Sparkline {
 
     update(values, values2 = []) {
         this._series = [values, values2];
-        this._area.queue_repaint();
+        if (!this._threadMode) this._area.queue_repaint();
+    }
+
+    // histories: one per thread (percent, oldest first); active: show them instead of the curve.
+    // A hidden surface is not redrawn.
+    setThreads(histories, active) {
+        this._threads = histories;
+        this._threadMode = active && histories.length > 0;
+        this._area.visible = !this._threadMode;
+        this._grid.visible = this._threadMode;
+        if (this._toggle) {
+            this._toggle.visible = histories.length > 0;
+            this._toggle.change_style_pseudo_class('checked', this._threadMode);
+            this._toggleTooltip.set_text(this._threadMode ? 'Afficher le total' : 'Afficher chaque thread');
+        }
+        if (this._threadMode) this._grid.queue_repaint();
+        else this._area.queue_repaint();
     }
 
     set caption(text) { this._caption.text = text; }
@@ -194,6 +300,58 @@ class Sparkline {
         cr.$dispose();
     }
 
+    // all the threads on one surface: fixed 0-100 % scale, the color of each curve follows the
+    // last value of its thread
+    _paintThreads(area) {
+        const cr = area.get_context();
+        const [w, h] = area.get_surface_size();
+        const hs = this._threads, n = hs.length;
+        if (n === 0) {
+            cr.$dispose();
+            return;
+        }
+        const gap = Math.max(1, Math.round(2 * global.ui_scale));
+        const cols = threadGridColumns(n, w, h, gap);
+        const rows = Math.ceil(n / cols);
+        const cw = (w - (cols - 1) * gap) / cols, ch = (h - (rows - 1) * gap) / rows;
+        const [fr, fg, fb] = foreground(area);
+        const pad = 1;
+        hs.forEach((v, i) => {
+            // pixel-aligned cell
+            const c = i % cols, r = Math.floor(i / cols);
+            const x = Math.round(c * (cw + gap)), y = Math.round(r * (ch + gap));
+            const cellW = Math.round(c * (cw + gap) + cw) - x, cellH = Math.round(r * (ch + gap) + ch) - y;
+            cr.setSourceRGBA(fr, fg, fb, 0.06);
+            cr.moveTo(x, y);
+            cr.lineTo(x + cellW, y);
+            cr.lineTo(x + cellW, y + cellH);
+            cr.lineTo(x, y + cellH);
+            cr.closePath();
+            cr.fill();
+            if (v.length < 2) return;
+
+            const last = v[v.length - 1];
+            const [r2, g2, b2] = last >= 0 ? rgb(usageColor(last)) : [fr, fg, fb];
+            const step = cellW / (HISTORY_LENGTH - 1);
+            const x0 = x + cellW - (v.length - 1) * step;
+            const yOf = p => y + pad + (cellH - 2 * pad) * (1 - Math.max(0, Math.min(100, p)) / 100);
+
+            cr.moveTo(x0, y + cellH);
+            tracePath(cr, v, x0, step, yOf, true);
+            cr.lineTo(x + cellW, y + cellH);
+            cr.closePath();
+            cr.setSourceRGBA(r2, g2, b2, 0.25);
+            cr.fill();
+
+            tracePath(cr, v, x0, step, yOf, false);
+            cr.setLineWidth(1);
+            cr.setLineJoin(Cairo.LineJoin.ROUND);
+            cr.setSourceRGB(r2, g2, b2);
+            cr.stroke();
+        });
+        cr.$dispose();
+    }
+
     _drawSeries(cr, v, color, w, h, pad) {
         if (v.length < 2) return;
         const [r, g, b] = rgb(color);
@@ -203,7 +361,7 @@ class Sparkline {
         const yOf = p => pad + (h - 2 * pad) * (1 - Math.max(0, Math.min(max, p)) / max);
 
         cr.moveTo(x0, h);
-        v.forEach((p, i) => cr.lineTo(x0 + i * step, yOf(p)));
+        tracePath(cr, v, x0, step, yOf, true);
         cr.lineTo(w, h);
         cr.closePath();
         const gradient = new Cairo.LinearGradient(0, 0, 0, h);
@@ -212,10 +370,7 @@ class Sparkline {
         cr.setSource(gradient);
         cr.fill();
 
-        v.forEach((p, i) => {
-            if (i === 0) cr.moveTo(x0, yOf(p));
-            else cr.lineTo(x0 + i * step, yOf(p));
-        });
+        tracePath(cr, v, x0, step, yOf, false);
         cr.setLineWidth(2 * global.ui_scale);
         cr.setLineJoin(Cairo.LineJoin.ROUND);
         cr.setSourceRGB(r, g, b);

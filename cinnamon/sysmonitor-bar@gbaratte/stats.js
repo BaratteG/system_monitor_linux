@@ -1,12 +1,21 @@
-// Parsing of the sysstats.sh output and value formatting. No St or Clutter here:
-// the views only read this state. Same logic as the data section of the KDE
-// widget (package/contents/ui/main.qml).
+// Parsing of the sysstats.sh and procstats.sh output, value formatting and the
+// "end task" state. No St or Clutter here: the views only read this state. Same
+// logic as the data section of the KDE widget (package/contents/ui/main.qml).
 
 const HISTORY_LENGTH = 60;
+// room of the thread blocks under the CPU gauge (CSS pixels)
+const THREAD_BLOCKS_WIDTH = 72;
+const THREAD_BLOCKS_HEIGHT = 100;
 
 // consecutive samples without data; a source is declared missing after a few
 // misses so that one slow nvidia-smi call doesn't make a group blink
 const MISS_LIMIT = 3;
+
+// the process list is refreshed less often than the rest: one run lasts about 1 s
+const MIN_PROCESS_INTERVAL = 2000;
+
+// how long a process gets to exit after SIGTERM before "Forcer l'arrêt" is offered
+const TERM_GRACE = 3000;
 
 // Breeze palette, so the colors don't depend on the Cinnamon theme
 const COLORS = {
@@ -126,6 +135,41 @@ function pushHistory(list, v) {
     return a;
 }
 
+// Blocks under the CPU gauge, one per thread: the largest square size (8 px down to 3 px) whose
+// rows stay under maxHeight, so that 128 threads shrink the blocks instead of lengthening the card.
+// Sizes in CSS pixels.
+function threadBlockLayout(count, width, maxHeight = THREAD_BLOCKS_HEIGHT) {
+    let size = 8, gap = 2, cols = 1, rows = 1;
+    for (size = 8; size >= 3; size--) {
+        gap = size >= 5 ? 2 : 1;
+        // never more columns than threads, so that a few blocks stay centered
+        cols = Math.max(1, Math.min(count, Math.floor((width + gap) / (size + gap))));
+        rows = Math.max(1, Math.ceil(count / cols));
+        if (rows * (size + gap) - gap <= maxHeight) break;
+    }
+    size = Math.max(size, 3);
+    return { size, gap, cols, rows, width: cols * (size + gap) - gap, height: rows * (size + gap) - gap };
+}
+
+// Columns of the grid of mini graphs: cells a bit wider than high (aspect 1.6), and few empty
+// cells in the last row, whatever the number of threads (4 to 128).
+function threadGridColumns(count, width, height, gap) {
+    let best = 1, bestScore = Infinity;
+    for (let cols = 1; cols <= count; cols++) {
+        const rows = Math.ceil(count / cols);
+        const cw = (width - (cols - 1) * gap) / cols, ch = (height - (rows - 1) * gap) / rows;
+        if (cw < 2 || ch < 2) continue;
+        const aspect = cw / ch;
+        const score = Math.abs(Math.log(aspect / 1.6)) + (aspect < 1.2 ? 0.6 : 0)
+            + 1.5 * (cols * rows - count) / (cols * rows);
+        if (score < bestScore) {
+            bestScore = score;
+            best = cols;
+        }
+    }
+    return best;
+}
+
 function shortName(path) {
     if (path === '/') return '/';
     const p = path.replace(/\/+$/, '');
@@ -153,6 +197,8 @@ class SysStats {
         this.cpuName = '';
         this.threadsBusy = -1;  // busy hardware threads, -1 until two samples
         this.threadsTotal = 0;
+        this.threadPct = [];    // current % of each hardware thread, -1 until two samples
+        this.threadHistory = [];  // per thread, same length as cpuHistory (oldest first)
         this.disks = [];        // [{ mount, used, total, pct }], sizes in MiB
         this.trackedData = [];  // per tracked entry: { a, b, age } from the script (KiB)
         this.home = '';
@@ -240,19 +286,26 @@ class SysStats {
         this._prevTotal = tot;
         this._prevIdle = idl;
 
-        // hardware threads above 50 % over the last interval
-        const cur = [];
+        // % of each hardware thread over the last interval; more than 50 % counts as busy
+        const cur = [], pcts = [];
         let busyThreads = 0;
         for (const thread of (d.cpuThreads || '').split('|')) {
             const [tt, ti] = thread.split(',').map(parseFloat);
             if (isNaN(tt) || isNaN(ti)) continue;
             cur.push([tt, ti]);
             const pv = this._prevThreads[cur.length - 1];
-            if (pv && tt > pv[0] && 1 - (ti - pv[1]) / (tt - pv[0]) > 0.5) busyThreads++;
+            let pct = -1;
+            if (pv) pct = tt > pv[0] ? Math.max(0, Math.min(100, 100 * (1 - (ti - pv[1]) / (tt - pv[0])))) : 0;
+            if (pct > 50) busyThreads++;
+            pcts.push(pct);
         }
-        this.threadsBusy = this._prevThreads.length === cur.length ? busyThreads : -1;
+        const same = this._prevThreads.length === cur.length;
+        this.threadsBusy = same ? busyThreads : -1;
         this.threadsTotal = cur.length;
         this._prevThreads = cur;
+        // the histories restart from zero when the number of threads changes
+        this.threadPct = same ? pcts : pcts.map(() => -1);
+        this.threadHistory = same ? this.threadHistory.map((h, i) => pushHistory(h, pcts[i])) : cur.map(() => []);
 
         this.cpuTemp = parseFloat(d.cpuTemp);
         this.cpuFreq = d.cpuFreq !== undefined ? parseFloat(d.cpuFreq) : -1;
@@ -298,6 +351,159 @@ class SysStats {
         this._prevRx = up ? rx : -1;
         this._prevTx = tx;
         this._prevNetTime = now;
+    }
+}
+
+// pid|killable|use|mem|name|command, the command may itself hold "|"
+function parseProcess(line) {
+    const f = [];
+    let start = 0;
+    while (f.length < 5) {
+        const end = line.indexOf('|', start);
+        if (end < 0) return null;
+        f.push(line.substring(start, end));
+        start = end + 1;
+    }
+    if (!/^[0-9]+$/.test(f[0])) return null;
+    return {
+        pid: parseInt(f[0]), killable: f[1] === '1', use: parseFloat(f[2]), mem: parseFloat(f[3]),
+        name: f[4] || f[0], command: line.substring(start),
+    };
+}
+
+// out: procstats.sh output; { kind: "cpu", "nvidia", "amd" or "none", rows }, or
+// null if the script gave nothing usable
+function parseProcesses(out) {
+    const lines = (out || '').split('\n');
+    if (!lines[0].startsWith('#')) return null;
+    const rows = lines.slice(1).map(parseProcess).filter(row => row);
+    return { kind: lines[0].substring(1).trim(), rows };
+}
+
+// kind: "cpu" or "gpu"
+function processArgs(kind, cfg) {
+    return kind === 'gpu' ? ['gpu', cfg.gpuSource] : ['cpu'];
+}
+
+function processInterval(cfg) { return Math.max(MIN_PROCESS_INTERVAL, cfg.updateInterval); }
+
+function processUseText(kind, v) { return valid(v) ? v.toFixed(kind === 'cpu' ? 1 : 0) : '--'; }
+
+// Mio below 1 Gio, then the units of the disks
+function processMemText(mib) {
+    if (!valid(mib)) return '--';
+    return mib < 1024 ? Math.round(mib) + ' Mio' : sizeText(mib);
+}
+
+// the tooltip doesn't wrap and a command can be long
+function processTooltip(row) {
+    const lines = (row.command || row.name).match(/.{1,80}/g) || [];
+    if (!row.killable) lines.push("Processus système ou d'un autre utilisateur");
+    return lines.join('\n');
+}
+
+// argv: the pid never goes through a shell
+function killArgs(pid, signal) { return ['kill', '-' + signal, String(pid)]; }
+
+function processCheckArgs(pid) { return ['ps', '-o', 'stat=', '-p', String(pid)]; }
+
+// out: output of processCheckArgs(); a zombie is finished, it only waits for its parent
+function processAlive(out) {
+    const state = (out || '').trim();
+    return state !== '' && !state.startsWith('Z');
+}
+
+// The "Fin de tâche" footer: selection followed by PID and one entry per process
+// being stopped. Neither timers nor subprocesses here: the applet sends the signals
+// and reports back through sent() and checked().
+// stages: sending -> waiting (exited? else stuck, or failed after SIGKILL)
+//         sending -> failed (kill returned an error: it may already be gone)
+class EndTask {
+    constructor() {
+        this.rows = [];         // the CPU list on screen
+        this.selectedPid = 0;
+        this.status = null;     // { text, ok } of the last event; ok is null while it runs
+        this._stops = new Map();    // pid -> { name, signal, stage, deadline, checking, recheck }
+    }
+
+    get selected() { return this.rows.find(r => r.pid === this.selectedPid) || null; }
+
+    setList(rows) {
+        this.rows = rows;
+        if (!this.selected) this.selectedPid = 0;
+        // a stuck process that left the list may have exited in the meantime
+        for (const [pid, stop] of this._stops) {
+            if (stop.stage === 'stuck' && !rows.some(r => r.pid === pid)) stop.recheck = true;
+        }
+    }
+
+    select(pid) {
+        if (this.rows.some(r => r.pid === pid)) this.selectedPid = pid;
+    }
+
+    get button() {
+        const row = this.selected;
+        const stop = row ? this._stops.get(row.pid) : undefined;
+        const force = stop !== undefined && stop.stage === 'stuck';
+        return {
+            text: force ? "Forcer l'arrêt" : 'Fin de tâche',
+            enabled: row !== null && row.killable && (stop === undefined || force),
+        };
+    }
+
+    // { pid, signal } to send for the selection, null if it must not be sent
+    request() {
+        const row = this.selected;
+        if (!row || !Number.isInteger(row.pid) || row.pid <= 1 || !this.button.enabled) return null;
+        const signal = this._stops.has(row.pid) ? 'KILL' : 'TERM';
+        this._stops.set(row.pid, {
+            name: row.name, signal, stage: 'sending', deadline: 0, checking: false, recheck: false,
+        });
+        this.status = { text: 'Arrêt de ' + row.name + '…', ok: null };
+        return { pid: row.pid, signal };
+    }
+
+    // the kill command ended
+    sent(pid, exitCode, now = Date.now()) {
+        const stop = this._stops.get(pid);
+        if (!stop) return;
+        stop.stage = exitCode === 0 ? 'waiting' : 'failed';
+        stop.deadline = now + TERM_GRACE;
+    }
+
+    // true while checksDue() has something to do, or will have
+    get watching() {
+        return [...this._stops.values()].some(s => s.stage === 'waiting' || s.stage === 'failed' || s.recheck);
+    }
+
+    // pids to look up now; each one must be answered by checked()
+    checksDue() {
+        const pids = [];
+        for (const [pid, stop] of this._stops) {
+            const due = stop.stage === 'waiting' || stop.stage === 'failed' || stop.recheck;
+            if (due && !stop.checking) {
+                stop.checking = true;
+                pids.push(pid);
+            }
+        }
+        return pids;
+    }
+
+    checked(pid, alive, now = Date.now()) {
+        const stop = this._stops.get(pid);
+        if (!stop) return;
+        stop.checking = false;
+        stop.recheck = false;
+        if (!alive) {
+            this._stops.delete(pid);
+            this.status = { text: stop.name + ' arrêté', ok: true };
+        } else if (stop.stage === 'failed' || (stop.stage === 'waiting' && now >= stop.deadline && stop.signal === 'KILL')) {
+            this._stops.delete(pid);
+            this.status = { text: "Impossible d'arrêter " + stop.name, ok: false };
+        } else if (stop.stage === 'waiting' && now >= stop.deadline) {
+            stop.stage = 'stuck';
+            this.status = { text: stop.name + ' ne répond pas', ok: false };
+        }
     }
 }
 
@@ -426,8 +632,11 @@ function tooltipText(stats, show, cfg) {
 
 module.exports = {
     COLORS,
+    EndTask,
     HISTORY_LENGTH,
     SysStats,
+    THREAD_BLOCKS_HEIGHT,
+    THREAD_BLOCKS_WIDTH,
     bytesText,
     diskUnitTio,
     displayed,
@@ -435,7 +644,16 @@ module.exports = {
     gioShort,
     gioTotal,
     historySpan,
+    killArgs,
     num,
+    parseProcesses,
+    processAlive,
+    processArgs,
+    processCheckArgs,
+    processInterval,
+    processMemText,
+    processTooltip,
+    processUseText,
     rateNum,
     rateText,
     rateUnit,
@@ -449,6 +667,8 @@ module.exports = {
     tempColor,
     tempDotColor,
     tempText,
+    threadBlockLayout,
+    threadGridColumns,
     tooltipText,
     usageColor,
     valid,

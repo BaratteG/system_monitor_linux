@@ -45,3 +45,31 @@
 .sysmon-disk-amount { min-width: 110px; }
 .sysmon-disk-percent { min-width: 42px; }
 .sysmon-bar-large { height: 6px; }
+
+/* Toolbar, arrows and buttons of the popup */
+.sysmon-icon-button, .sysmon-arrow { padding: 0 6px; border-radius: 4px; }
+.sysmon-icon-button:hover, .sysmon-arrow:hover { background-color: rgba(128, 128, 128, 0.25); }
+.sysmon-icon-button:checked { background-color: rgba(128, 128, 128, 0.25); }
+.sysmon-button {
+    padding: 3px 10px;
+    border-radius: 4px;
+    background-color: rgba(128, 128, 128, 0.18);
+}
+.sysmon-button:hover { background-color: rgba(128, 128, 128, 0.32); }
+
+/* Floating window */
+.sysmon-float-title { spacing: 8px; padding: 4px 10px; }
+
+/* Process panel: the padding on the right of the rows (header included, so they stay
+   aligned) leaves room for the scrollbar and a gap after the last column */
+.sysmon-proc-panel { spacing: 6px; padding: 0 10px 0 0; }
+.sysmon-proc-head, .sysmon-proc-row { spacing: 8px; padding: 2px 24px 2px 4px; }
+.sysmon-proc-head { font-size: 0.8em; }
+.sysmon-proc-row { border-radius: 4px; }
+.sysmon-proc-row:hover { background-color: rgba(128, 128, 128, 0.14); }
+.sysmon-proc-row:checked { background-color: rgba(61, 174, 233, 0.35); }
+.sysmon-proc-pid { width: 56px; }
+.sysmon-proc-use { width: 46px; }
+.sysmon-proc-mem { width: 72px; }
+.sysmon-proc-footer { spacing: 6px; }
+.sysmon-proc-actions { spacing: 8px; }
