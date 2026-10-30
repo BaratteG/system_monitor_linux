@@ -16,6 +16,7 @@
     <entry name="tempPanel" type="Bool"><default>true</default></entry>
     <entry name="tempPopup" type="Bool"><default>true</default></entry>
     <entry name="freqPopup" type="Bool"><default>true</default></entry>
+    <entry name="threadsPopup" type="Bool"><default>true</default></entry>
     <entry name="ramPanel" type="Bool"><default>true</default></entry>
     <entry name="ramPopup" type="Bool"><default>true</default></entry>
     <entry name="amountsPanel" type="Bool"><default>true</default></entry>

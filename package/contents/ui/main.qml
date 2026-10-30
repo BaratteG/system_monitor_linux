@@ -31,6 +31,9 @@ Item {
     property real vramUsed: -1    // MiB
     property string gpuName: ""
     property string cpuName: ""
+    property int threadsBusy: -1      // busy hardware threads, -1 until two samples
+    property int threadsTotal: 0
+    property var prevThreads: []
     property var disks: []        // [{ mount, used, total, pct }], sizes in MiB
     property real prevTotal: -1
     property real prevIdle: -1
@@ -79,6 +82,7 @@ Item {
     readonly property bool popupCpuTemp: cfg.tempPopup && cpuTempAvail
     readonly property bool popupGpuTemp: cfg.tempPopup && gpuTempAvail
     readonly property bool popupFreq: cfg.freqPopup
+    readonly property bool popupThreads: cfg.threadsPopup && threadsTotal > 0
     readonly property bool popupDisk: cfg.diskPopup && popupDisks.length > 0
     readonly property bool popupNet: cfg.netPopup && netAvail
 
@@ -176,6 +180,18 @@ Item {
         if (prevTotal >= 0 && tot > prevTotal)
             cpuPct = Math.max(0, Math.min(100, 100 * (1 - (idl - prevIdle) / (tot - prevTotal))))
         prevTotal = tot; prevIdle = idl
+        // hardware threads above 50 % over the last interval
+        var th = (d.cpuThreads || "").split("|"), cur = [], busy = 0
+        for (var n = 0; n < th.length; n++) {
+            var tv = th[n].split(","), tt = parseFloat(tv[0]), ti = parseFloat(tv[1])
+            if (isNaN(tt) || isNaN(ti)) continue
+            cur.push([tt, ti])
+            var pv = prevThreads[cur.length - 1]
+            if (pv && tt > pv[0] && 1 - (ti - pv[1]) / (tt - pv[0]) > 0.5) busy++
+        }
+        threadsBusy = prevThreads.length === cur.length ? busy : -1
+        threadsTotal = cur.length
+        prevThreads = cur
         cpuTemp = parseFloat(d.cpuTemp)
         cpuFreq = d.cpuFreq !== undefined ? parseFloat(d.cpuFreq) : -1
         gpuFreq = d.gpuFreq !== undefined ? parseFloat(d.gpuFreq) : -1
@@ -324,6 +340,7 @@ Item {
         return valid(vramPct) ? gio(vramUsed) + " / " + gio(vramTotal) + " Gio" : "--"
     }
     function freqDetail(mhz) { return valid(mhz) || !autoHide ? ghz(mhz) : " " }
+    function threadsText() { return (threadsBusy >= 0 ? threadsBusy : "--") + "/" + threadsTotal + " threads" }
     function ghz(mhz) { return valid(mhz) ? (mhz / 1000).toFixed(2) + " GHz" : "-- GHz" }
     function tempText(v) { return valid(v) ? Math.round(v) + " °C" : "-- °C" }
 
@@ -358,7 +375,8 @@ Item {
         var lines = []
         var t = function (on, v) { return on ? " · " + tempText(v) : "" }
         var f = function (v) { return popupFreq && (valid(v) || !autoHide) ? " · " + ghz(v) : "" }
-        if (popupCpu) lines.push("CPU  " + num(cpuPct) + " %" + t(popupCpuTemp, cpuTemp) + f(cpuFreq))
+        if (popupCpu) lines.push("CPU  " + num(cpuPct) + " %" + t(popupCpuTemp, cpuTemp) + f(cpuFreq)
+                                 + (popupThreads ? " · " + threadsText() : ""))
         if (popupRam) lines.push("RAM  " + num(ramPct) + " % · " + ramDetail())
         if (popupGpu) lines.push("GPU  " + num(gpuPct) + " %" + t(popupGpuTemp, gpuTemp) + f(gpuFreq))
         if (popupVram) lines.push("VRAM  " + num(vramPct) + " % · " + vramDetail())
@@ -708,6 +726,7 @@ Item {
             id: gauge
             property string label
             property string detail
+            property string detail2
             property real value: -1
             property color color: PlasmaCore.Theme.highlightColor
             spacing: PlasmaCore.Units.smallSpacing
@@ -780,6 +799,13 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 visible: gauge.detail !== ""
                 text: gauge.detail
+                font: PlasmaCore.Theme.smallestFont
+                opacity: 0.8
+            }
+            PlasmaComponents3.Label {
+                Layout.alignment: Qt.AlignHCenter
+                visible: gauge.detail2 !== ""
+                text: gauge.detail2
                 font: PlasmaCore.Theme.smallestFont
                 opacity: 0.8
             }
@@ -1087,6 +1113,7 @@ Item {
             property string aLabel
             property real aValue: -1
             property string aDetail
+            property string aDetail2
             property bool bVisible: true
             property string bLabel
             property real bValue: -1
@@ -1154,7 +1181,7 @@ Item {
                     Gauge {
                         Layout.alignment: Qt.AlignTop
                         visible: card.aVisible
-                        label: card.aLabel; value: card.aValue; detail: card.aDetail
+                        label: card.aLabel; value: card.aValue; detail: card.aDetail; detail2: card.aDetail2
                         color: root.usageColor(card.aValue)
                     }
                     Gauge {
@@ -1189,6 +1216,7 @@ Item {
             aLabel: "CPU"
             aValue: root.cpuPct
             aDetail: root.popupFreq ? root.freqDetail(root.cpuFreq) : " "
+            aDetail2: root.popupThreads ? root.threadsText() : ""
             bVisible: root.popupRam
             bLabel: "RAM"
             bValue: root.ramPct

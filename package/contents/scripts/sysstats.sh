@@ -13,6 +13,8 @@ LC_ALL=C
 read -r _ u n s idle iow irq sirq st _ < /proc/stat
 cpu_total=$((u + n + s + idle + iow + irq + sirq + st))
 cpu_idle=$((idle + iow))
+# per hardware thread "total,idle" jiffies, to count the busy threads
+cpu_threads=$(awk '/^cpu[0-9]/ { printf "%s%d,%d", sep, $2+$3+$4+$5+$6+$7+$8+$9, $5+$6; sep = "|" }' /proc/stat)
 
 # CPU temperature (millidegrees), first source found wins:
 #   k10temp / zenpower (AMD): Tdie if exposed, else Tctl minus the known
@@ -209,4 +211,4 @@ if [ -n "$tracked" ]; then
   done <<< "$tracked"
 fi
 
-echo "cpuTotal=$cpu_total;cpuIdle=$cpu_idle;cpuTemp=$cpu_temp;cpuFreq=$cpu_freq;memTotal=$mem_total;memAvail=$mem_avail;gpuUse=$gpu_use;gpuTemp=$gpu_temp;gpuFreq=$gpu_freq;vramUsed=$vram_used;vramTotal=$vram_total;gpuName=$gpu_name;gpuKind=$gpu_kind;netRx=$net_rx;netTx=$net_tx;netIf=$net_names;cpuName=$cpu_name;disks=$disks;custom=$custom;home=$HOME"
+echo "cpuTotal=$cpu_total;cpuIdle=$cpu_idle;cpuThreads=$cpu_threads;cpuTemp=$cpu_temp;cpuFreq=$cpu_freq;memTotal=$mem_total;memAvail=$mem_avail;gpuUse=$gpu_use;gpuTemp=$gpu_temp;gpuFreq=$gpu_freq;vramUsed=$vram_used;vramTotal=$vram_total;gpuName=$gpu_name;gpuKind=$gpu_kind;netRx=$net_rx;netTx=$net_tx;netIf=$net_names;cpuName=$cpu_name;disks=$disks;custom=$custom;home=$HOME"

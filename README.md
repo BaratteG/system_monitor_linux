@@ -5,7 +5,7 @@ Widget (plasmoid) KDE Plasma 5.27 pour le panneau : CPU, RAM, GPU et VRAM (usage
 ## Fonctionnalités
 - Affichage compact en groupes : `CPU 12% 45°  RAM 15% 9.1/60G  |  GPU 3% 44°  VRAM 18% 5.9/32G  |  NET ↓1.2M ↑45K  |  / 25%  home 40%`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
 - Températures colorées selon des seuils (alerte 70 °C, critique 85 °C par défaut).
-- Clic : popup avec les cartes Processeur (avec le nom du CPU), Carte graphique, Réseau et Stockage. Processeur et Carte graphique : jauges circulaires (avec la fréquence CPU moyenne et l'horloge GPU), pastille de température et historique d'utilisation (≈ 2 min).
+- Clic : popup avec les cartes Processeur (avec le nom du CPU), Carte graphique, Réseau et Stockage. Processeur et Carte graphique : jauges circulaires (avec la fréquence CPU moyenne, le nombre de threads CPU occupés à plus de 50 % et l'horloge GPU), pastille de température et historique d'utilisation (≈ 2 min).
 - Stockage :
   - partitions locales détectées automatiquement (`df -l`, sans `/boot` ni doublons de volume) ;
   - points de montage ajoutés à la main, y compris les partages réseau (NFS, SMB) : espace occupé du système de fichiers qui contient le chemin ;
@@ -35,7 +35,7 @@ kquitapp5 plasmashell && kstart5 plasmashell
 ## Configuration
 Clic droit sur le widget > Configurer :
 - **Général** : intervalle (500-10000 ms, défaut 2000), source GPU (auto/nvidia/amd), interface réseau (vide = auto), seuils de température d'alerte et critique.
-- **Affichage** : pour chaque mesure (CPU, températures, fréquences, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
+- **Affichage** : pour chaque mesure (CPU, températures, fréquences, threads occupés, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
 - **Stockage** : partitions détectées à afficher dans le panneau et/ou le popup (par défaut `/` dans le panneau, toutes dans le popup) ; dossiers et points de montage suivis (chemin, quota optionnel pour les dossiers, panneau / popup) ; fréquence de recalcul de la taille des dossiers.
 
 ## Pourquoi pas ksystemstats ?
