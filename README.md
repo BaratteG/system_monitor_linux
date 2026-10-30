@@ -1,11 +1,17 @@
 # System Monitor Bar
 
-Widget (plasmoid) KDE Plasma 5.27 pour le panneau : CPU, RAM, GPU et VRAM (usage et températures), débit réseau descendant et montant.
+Widget (plasmoid) KDE Plasma 5.27 pour le panneau : CPU, RAM, GPU et VRAM (usage et températures), stockage (partitions, dossiers, partages réseau) et débit réseau descendant et montant.
 
 ## Fonctionnalités
-- Affichage compact en trois groupes : `CPU 12% 45°  RAM 15% 9.1 / 60 Gio  |  GPU 3% 44°  VRAM 18% 5.9 / 32 Gio  |  NET ↓ 1.2 Mo/s ↑ 45 Ko/s`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
+- Affichage compact en groupes : `CPU 12% 45°  RAM 15% 9.1/60G  |  GPU 3% 44°  VRAM 18% 5.9/32G  |  / 25%  home 40%  |  NET ↓1.2M ↑45K`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
 - Températures colorées selon des seuils (alerte 70 °C, critique 85 °C par défaut).
-- Clic : popup avec deux cartes (Processeur, Carte graphique) : jauges circulaires (avec la fréquence CPU moyenne et l'horloge GPU), pastille de température et historique d'utilisation (≈ 2 min).
+- Clic : popup avec les cartes Processeur (avec le nom du CPU), Carte graphique, Stockage et Réseau. Processeur et Carte graphique : jauges circulaires (avec la fréquence CPU moyenne et l'horloge GPU), pastille de température et historique d'utilisation (≈ 2 min).
+- Stockage :
+  - partitions locales détectées automatiquement (`df -l`, sans `/boot` ni doublons de volume) ;
+  - points de montage ajoutés à la main, y compris les partages réseau (NFS, SMB) : espace occupé du système de fichiers qui contient le chemin ;
+  - dossiers ajoutés à la main : taille de leur contenu (`du -x`, en basse priorité), affichée en pourcentage de la taille du disque qui le contient, ou d'un quota optionnel.
+
+  Les chemins ajoutés à la main sont mesurés en arrière-plan et mis en cache dans `$XDG_RUNTIME_DIR` (points de montage toutes les 10 s, dossiers toutes les 5 min par défaut) : un gros dossier ou un NAS injoignable ne bloque jamais le relevé.
 - Réseau : débit ↓/↑ calculé depuis `/sys/class/net/*/statistics`. Par défaut, somme des interfaces physiques actives (exclut `lo`, ponts, docker, VPN). Interface réglable dans la configuration.
 - GPU NVIDIA (`nvidia-smi`) ou AMD (sysfs), détection automatique.
 - Température CPU, première source trouvée :
@@ -27,7 +33,10 @@ kquitapp5 plasmashell && kstart5 plasmashell
 ```
 
 ## Configuration
-Clic droit sur le widget > Configurer : intervalle (500-10000 ms, défaut 2000), source GPU (auto/nvidia/amd), métriques affichées (dont le réseau), interface réseau (vide = auto), affichage des températures, masquage des mesures indisponibles, seuils d'alerte et critique.
+Clic droit sur le widget > Configurer :
+- **Général** : intervalle (500-10000 ms, défaut 2000), source GPU (auto/nvidia/amd), interface réseau (vide = auto), seuils de température d'alerte et critique.
+- **Affichage** : pour chaque mesure (CPU, températures, fréquences, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
+- **Stockage** : partitions détectées à afficher dans le panneau et/ou le popup (par défaut `/` dans le panneau, toutes dans le popup) ; dossiers et points de montage suivis (chemin, quota optionnel pour les dossiers, panneau / popup) ; fréquence de recalcul de la taille des dossiers.
 
 ## Pourquoi pas ksystemstats ?
 Les capteurs `org.kde.ksysguard.sensors` donnent des valeurs erronées sur cette machine (température CPU à 0, usage NVIDIA qui renvoie la température, VRAM totale doublée). Le widget lit donc directement `/proc`, `/sys` et `nvidia-smi` via `package/contents/scripts/sysstats.sh`.

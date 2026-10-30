@@ -12,14 +12,8 @@ Item {
     // ---- configuration ----
     readonly property int updateInterval: plasmoid.configuration.updateInterval
     readonly property string gpuSource: plasmoid.configuration.gpuSource
-    readonly property bool showCpu: plasmoid.configuration.showCpu
-    readonly property bool showGpu: plasmoid.configuration.showGpu
-    readonly property bool showRam: plasmoid.configuration.showRam
-    readonly property bool showVram: plasmoid.configuration.showVram
-    readonly property bool showNet: plasmoid.configuration.showNet
     // interface name is passed to the shell: keep only safe characters
     readonly property string netInterface: (plasmoid.configuration.netInterface || "").replace(/[^A-Za-z0-9_.:@-]/g, "")
-    readonly property bool showTemps: plasmoid.configuration.showTemperatures
     readonly property bool autoHide: plasmoid.configuration.autoHide
     readonly property int warnTemp: plasmoid.configuration.warningTemp
     readonly property int critTemp: plasmoid.configuration.criticalTemp
@@ -36,6 +30,8 @@ Item {
     property real vramTotal: -1   // MiB
     property real vramUsed: -1    // MiB
     property string gpuName: ""
+    property string cpuName: ""
+    property var disks: []        // [{ mount, used, total, pct }], sizes in MiB
     property real prevTotal: -1
     property real prevIdle: -1
     property real netDown: -1     // bytes/s
@@ -53,18 +49,99 @@ Item {
     property int gpuMisses: 0
     property int vramMisses: 0
     property int netMisses: 0
+    property int diskMisses: 0
     property int cpuTempMisses: 0
     property int gpuTempMisses: 0
     function avail(misses) { return !autoHide || misses < missLimit }
 
-    // what is actually displayed: user choice AND data available
-    readonly property bool gpuOn: showGpu && avail(gpuMisses)
-    readonly property bool vramOn: showVram && avail(gpuMisses) && avail(vramMisses)
-    readonly property bool netOn: showNet && avail(netMisses)
-    readonly property bool cpuTempOn: showTemps && avail(cpuTempMisses)
-    readonly property bool gpuTempOn: showTemps && avail(gpuTempMisses)
-    readonly property bool systemGroupOn: showCpu || showRam
-    readonly property bool gpuGroupOn: gpuOn || vramOn
+    // data available on this machine (auto-hide)
+    readonly property bool gpuAvail: avail(gpuMisses)
+    readonly property bool vramAvail: avail(gpuMisses) && avail(vramMisses)
+    readonly property bool netAvail: avail(netMisses)
+    readonly property bool cpuTempAvail: avail(cpuTempMisses)
+    readonly property bool gpuTempAvail: avail(gpuTempMisses)
+
+    // what is actually displayed: choice of the Display tab AND data available
+    readonly property var cfg: plasmoid.configuration
+    readonly property bool panelCpu: cfg.cpuPanel
+    readonly property bool panelRam: cfg.ramPanel
+    readonly property bool panelGpu: cfg.gpuPanel && gpuAvail
+    readonly property bool panelVram: cfg.vramPanel && vramAvail
+    readonly property bool panelCpuTemp: cfg.tempPanel && cpuTempAvail
+    readonly property bool panelGpuTemp: cfg.tempPanel && gpuTempAvail
+    readonly property bool panelAmounts: cfg.amountsPanel
+    readonly property bool panelDisk: cfg.diskPanel && panelDisks.length > 0
+    readonly property bool panelNet: cfg.netPanel && netAvail
+    readonly property bool popupCpu: cfg.cpuPopup
+    readonly property bool popupRam: cfg.ramPopup
+    readonly property bool popupGpu: cfg.gpuPopup && gpuAvail
+    readonly property bool popupVram: cfg.vramPopup && vramAvail
+    readonly property bool popupCpuTemp: cfg.tempPopup && cpuTempAvail
+    readonly property bool popupGpuTemp: cfg.tempPopup && gpuTempAvail
+    readonly property bool popupFreq: cfg.freqPopup
+    readonly property bool popupDisk: cfg.diskPopup && popupDisks.length > 0
+    readonly property bool popupNet: cfg.netPopup && netAvail
+
+    // ---- storage: detected partitions + tracked folders / mount points ----
+    function parseJson(text, fallback) {
+        try { var v = JSON.parse(text); return v === null || v === undefined ? fallback : v }
+        catch (e) { return fallback }
+    }
+    readonly property var diskPrefs: parseJson(cfg.diskPrefs, {})
+    readonly property var tracked: parseJson(cfg.customPaths, []).filter(function (e) { return e && e.path })
+    property var trackedData: []   // per tracked entry: { a, b, age } from the script (KiB)
+    property string home: ""
+
+    function shortName(path) {
+        if (path === "/") return "/"
+        var p = path.replace(/\/+$/, "")
+        return p.substring(p.lastIndexOf("/") + 1) || p
+    }
+    function displayPath(path) {
+        return home && path.indexOf(home) === 0 ? "~" + path.substring(home.length) : path
+    }
+
+    // one list for both views: { label, short, kind, used, total, size, pct, state, panel, popup }
+    // sizes in MiB; pct -1 when there is no capacity (folder not measured yet);
+    // base (folders): "quota" or "disk", what total and pct refer to;
+    // state: "ok", "pending" (first measure running) or "error"
+    readonly property var storageItems: {
+        var out = []
+        for (var i = 0; i < disks.length; i++) {
+            var dk = disks[i], pref = diskPrefs[dk.mount]
+            out.push({ label: dk.mount, short: shortName(dk.mount), kind: "mount", state: "ok",
+                       used: dk.used, total: dk.total, size: dk.used, pct: dk.pct,
+                       panel: pref ? !!pref.panel : dk.mount === "/",
+                       popup: pref ? pref.popup !== false : true })
+        }
+        for (var j = 0; j < tracked.length; j++) {
+            var t = tracked[j], r = trackedData[j] || { a: -1, b: -1 }
+            var it = { label: displayPath(t.path), short: shortName(t.path), kind: t.kind === "mount" ? "mount" : "folder",
+                       state: r.a === -1 ? "pending" : (r.a < 0 ? "error" : "ok"),
+                       used: -1, total: -1, size: -1, pct: -1, base: "",
+                       panel: !!t.panel, popup: t.popup !== false }
+            if (it.state === "ok" && it.kind === "mount") {
+                it.used = r.a / 1024; it.total = (r.a + r.b) / 1024; it.size = it.used
+                it.pct = it.total > 0 ? 100 * it.used / it.total : -1
+            } else if (it.state === "ok") {
+                it.size = r.a / 1024
+                // share of the quota if set, else of the disk that holds the folder
+                if (t.quota > 0) { it.total = t.quota * 1024; it.base = "quota" }
+                else if (r.b > 0) { it.total = r.b / 1024; it.base = "disk" }
+                if (it.total > 0) it.pct = 100 * it.size / it.total
+            }
+            out.push(it)
+        }
+        return out
+    }
+    readonly property var panelDisks: storageItems.filter(function (d) { return d.panel })
+    readonly property var popupDisks: storageItems.filter(function (d) { return d.popup })
+
+    // shell argument: single quotes, embedded quotes escaped
+    function shellQuote(str) { return "'" + str.replace(/'/g, "'\\''") + "'" }
+    readonly property string trackedSpec: tracked.map(function (t) {
+        return (t.kind === "mount" ? "m|" : "f|") + t.path.replace(/[\r\n]/g, "")
+    }).join("\n")
 
     // usage history for the popup sparklines (percent, oldest first)
     readonly property int historyLength: 60
@@ -77,7 +154,8 @@ Item {
     readonly property real vramPct: vramTotal > 0 && vramUsed >= 0 ? 100 * vramUsed / vramTotal : -1
 
     readonly property string scriptPath: Qt.resolvedUrl("../scripts/sysstats.sh").toString().replace(/^file:\/\//, "")
-    readonly property string command: "bash '" + scriptPath + "' " + gpuSource + " '" + netInterface + "'"
+    readonly property string command: "bash " + shellQuote(scriptPath) + " " + shellQuote(gpuSource) + " " + shellQuote(netInterface)
+                                      + " " + shellQuote(trackedSpec) + " " + Math.max(60, cfg.folderRefresh * 60)
 
     function pushHistory(list, v) {
         var a = list.slice(Math.max(0, list.length - historyLength + 1))
@@ -108,6 +186,25 @@ Item {
         vramUsed = parseFloat(d.vramUsed)
         vramTotal = parseFloat(d.vramTotal)
         gpuName = d.gpuName || ""
+        cpuName = cleanCpuName(d.cpuName || "")
+        var list = []
+        var entries = (d.disks || "").split("|")
+        for (var e = 0; e < entries.length; e++) {
+            var f = entries[e].split(":")
+            if (f.length < 3) continue
+            var used = parseFloat(f[1]) / 1024, total = used + parseFloat(f[2]) / 1024
+            if (total > 0) list.push({ mount: f[0], used: used, total: total, pct: 100 * used / total })
+        }
+        disks = list
+        diskMisses = list.length > 0 ? 0 : diskMisses + 1
+        home = d.home || ""
+        var td = []
+        var rows = (d.custom || "").split("|")
+        for (var c = 0; c < rows.length; c++) {
+            var g = rows[c].split(":")
+            if (g.length >= 4) td[parseInt(g[0])] = { a: parseFloat(g[1]), b: parseFloat(g[2]), age: parseFloat(g[3]) }
+        }
+        trackedData = td
         gpuMisses = d.gpuKind ? 0 : gpuMisses + 1
         vramMisses = vramTotal > 0 ? 0 : vramMisses + 1
         cpuTempMisses = valid(cpuTemp) ? 0 : cpuTempMisses + 1
@@ -168,6 +265,32 @@ Item {
         var v = mib / 1024
         return v >= 10 ? Math.round(v).toString() : v.toFixed(1)
     }
+    // "AMD Ryzen 9 9950X3D 16-Core Processor" -> "AMD Ryzen 9 9950X3D"
+    // "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz" -> "Intel Core i7-9700K"
+    function cleanCpuName(n) {
+        return n.replace(/\((R|TM)\)/gi, "")
+                .replace(/\s+@\s+.*$/, "")
+                .replace(/\s+w\/\s.*$/i, "")
+                .replace(/\s+\d+-Cores?( Processor)?$/i, "")
+                .replace(/\s+(CPU|Processor)$/i, "")
+                .replace(/\s+/g, " ").trim()
+    }
+    // disk sizes: used and total share the unit of the total, so the two
+    // numbers compare at a glance (Gio up to 10 Tio, Tio above)
+    function diskUnitTio(totalMib) { return totalMib >= 10 * 1024 * 1024 }
+    function sizeNum(mib, totalMib) {
+        var g = mib / 1024
+        if (diskUnitTio(totalMib)) return (g / 1024).toFixed(1)
+        return g < 99.95 ? g.toFixed(1) : Math.round(g).toString()
+    }
+    function sizeText(mib) { return sizeNum(mib, mib) + (diskUnitTio(mib) ? " Tio" : " Gio") }
+    // panel size: "42.0G" below 1000 Gio, "1.3T" above
+    function sizeShortNum(mib) {
+        var g = mib / 1024
+        return g < 999.5 ? (g < 99.95 ? g.toFixed(1) : Math.round(g).toString()) : (g / 1024).toFixed(1)
+    }
+    function sizeShortUnit(mib) { return mib / 1024 < 999.5 ? "G" : "T" }
+    function sizeShort(mib) { return sizeShortNum(mib) + sizeShortUnit(mib) }
     function gio(mib) { return (mib / 1024).toFixed(1) }
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
@@ -230,14 +353,18 @@ Item {
     Plasmoid.toolTipSubText: {
         var lines = []
         var t = function (on, v) { return on ? " · " + tempText(v) : "" }
-        var f = function (v) { return valid(v) || !autoHide ? " · " + ghz(v) : "" }
-        if (showCpu) lines.push("CPU  " + num(cpuPct) + " %" + t(cpuTempOn, cpuTemp) + f(cpuFreq))
-        if (showRam) lines.push("RAM  " + num(ramPct) + " % · " + ramDetail())
-        if (gpuOn) lines.push("GPU  " + num(gpuPct) + " %" + t(gpuTempOn, gpuTemp) + f(gpuFreq))
-        if (vramOn) lines.push("VRAM  " + num(vramPct) + " % · " + vramDetail())
-        if (netOn) lines.push("Réseau  ↓ " + rateText(netDown) + " · ↑ " + rateText(netUp))
+        var f = function (v) { return popupFreq && (valid(v) || !autoHide) ? " · " + ghz(v) : "" }
+        if (popupCpu) lines.push("CPU  " + num(cpuPct) + " %" + t(popupCpuTemp, cpuTemp) + f(cpuFreq))
+        if (popupRam) lines.push("RAM  " + num(ramPct) + " % · " + ramDetail())
+        if (popupGpu) lines.push("GPU  " + num(gpuPct) + " %" + t(popupGpuTemp, gpuTemp) + f(gpuFreq))
+        if (popupVram) lines.push("VRAM  " + num(vramPct) + " % · " + vramDetail())
+        if (popupDisk) lines.push("Stockage  " + popupDisks.map(function (d) {
+            return d.short + " " + (d.pct >= 0 ? Math.round(d.pct) + " %" : (d.size >= 0 ? sizeShort(d.size) : "--"))
+        }).join(" · "))
+        if (popupNet) lines.push("Réseau  ↓ " + rateText(netDown) + " · ↑ " + rateText(netUp))
         return lines.join("\n")
     }
+
 
     // ======================================================================
     // Compact representation (panel)
@@ -247,6 +374,8 @@ Item {
         readonly property bool vertical: plasmoid.formFactor === PlasmaCore.Types.Vertical
         // thick panels get the label stacked above the value
         readonly property bool tall: vertical || height >= PlasmaCore.Units.gridUnit * 2.3
+        readonly property bool systemGroup: root.panelCpu || root.panelRam
+        readonly property bool gpuGroup: root.panelGpu || root.panelVram
 
         Layout.minimumWidth: vertical ? 0 : grid.implicitWidth
         Layout.preferredWidth: grid.implicitWidth
@@ -297,6 +426,61 @@ Item {
             }
             // keeps the text on the same line as the cells that have a usage bar
             Item { implicitHeight: 2 }
+        }
+
+        // one disk / folder in the panel: percent with bar, or size while a folder has no capacity yet
+        component DiskCell: GridLayout {
+            id: dcell
+            property var item
+            readonly property bool hasPct: item.pct >= 0
+            columns: compact.tall ? 1 : 2
+            rowSpacing: 0
+            columnSpacing: PlasmaCore.Units.smallSpacing
+
+            PlasmaComponents3.Label {
+                text: dcell.item.short
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.letterSpacing: 0.6
+                opacity: 0.6
+                Layout.preferredHeight: dNum.implicitHeight
+                Layout.alignment: compact.tall ? Qt.AlignLeft : (Qt.AlignTop | Qt.AlignLeft)
+                verticalAlignment: Text.AlignVCenter
+            }
+            ColumnLayout {
+                spacing: 2
+                Layout.alignment: Qt.AlignTop
+                Row {
+                    PlasmaComponents3.Label {
+                        id: dNum
+                        text: dcell.hasPct ? root.num(dcell.item.pct)
+                                           : (dcell.item.size >= 0 ? root.sizeShortNum(dcell.item.size) : "--")
+                        width: dcell.hasPct ? tmNum.width : tmAmount.width
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    PlasmaComponents3.Label {
+                        text: dcell.hasPct || dcell.item.size < 0 ? "%" : root.sizeShortUnit(dcell.item.size)
+                        font: PlasmaCore.Theme.smallestFont
+                        opacity: 0.6
+                        leftPadding: dcell.hasPct ? 0 : 1
+                        width: dcell.hasPct ? tmUnit.width + 2 : implicitWidth
+                        height: dNum.height
+                        horizontalAlignment: Text.AlignRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 2
+                    radius: 1
+                    color: root.withAlpha(PlasmaCore.Theme.textColor, dcell.hasPct ? 0.15 : 0)
+                    Rectangle {
+                        height: parent.height
+                        radius: 1
+                        width: parent.width * Math.max(0, Math.min(100, dcell.item.pct)) / 100
+                        color: root.memColor(dcell.item.pct)
+                    }
+                }
+            }
         }
 
         component NetCell: GridLayout {
@@ -447,21 +631,21 @@ Item {
             rightPadding: PlasmaCore.Units.smallSpacing
 
             Cell {
-                visible: root.showCpu
+                visible: root.panelCpu
                 label: "CPU"; value: root.cpuPct
-                hasTemp: root.cpuTempOn; temp: root.cpuTemp
+                hasTemp: root.panelCpuTemp; temp: root.cpuTemp
             }
             Cell {
-                visible: root.showRam
+                visible: root.panelRam
                 label: "RAM"; value: root.ramPct
                 barColor: root.memColor(root.ramPct)
-                amount: root.gioShort(root.memTotal > 0 ? root.memUsed : -1)
+                amount: root.panelAmounts ? root.gioShort(root.memTotal > 0 ? root.memUsed : -1) : ""
                 amountTotal: root.gioTotal(root.memTotal)
             }
 
             // separator between the system group and the graphics group
             Rectangle {
-                visible: root.systemGroupOn && root.gpuGroupOn
+                visible: compact.gpuGroup && compact.systemGroup
                 width: compact.vertical ? compact.width * 0.5 : 1
                 height: compact.vertical ? 1 : compact.height * 0.5
                 color: PlasmaCore.Theme.textColor
@@ -469,27 +653,40 @@ Item {
             }
 
             Cell {
-                visible: root.gpuOn
+                visible: root.panelGpu
                 label: "GPU"; value: root.gpuPct
-                hasTemp: root.gpuTempOn; temp: root.gpuTemp
+                hasTemp: root.panelGpuTemp; temp: root.gpuTemp
             }
             Cell {
-                visible: root.vramOn
+                visible: root.panelVram
                 label: "VRAM"; value: root.vramPct
                 barColor: root.memColor(root.vramPct)
-                amount: root.gioShort(root.valid(root.vramPct) ? root.vramUsed : -1)
+                amount: root.panelAmounts ? root.gioShort(root.valid(root.vramPct) ? root.vramUsed : -1) : ""
                 amountTotal: root.gioTotal(root.vramTotal)
             }
 
             Rectangle {
-                visible: root.netOn && (root.systemGroupOn || root.gpuGroupOn)
+                visible: root.panelDisk && (compact.systemGroup || compact.gpuGroup)
                 width: compact.vertical ? compact.width * 0.5 : 1
                 height: compact.vertical ? 1 : compact.height * 0.5
                 color: PlasmaCore.Theme.textColor
                 opacity: 0.18
             }
 
-            NetCell { visible: root.netOn }
+            Repeater {
+                model: root.panelDisk ? root.panelDisks : []
+                delegate: DiskCell { item: modelData }
+            }
+
+            Rectangle {
+                visible: root.panelNet && (compact.systemGroup || compact.gpuGroup || root.panelDisk)
+                width: compact.vertical ? compact.width * 0.5 : 1
+                height: compact.vertical ? 1 : compact.height * 0.5
+                color: PlasmaCore.Theme.textColor
+                opacity: 0.18
+            }
+
+            NetCell { visible: root.panelNet }
         }
     }
 
@@ -714,6 +911,105 @@ Item {
             }
         }
 
+        // storage: one row per local filesystem
+        component DiskCard: Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: diskBody.implicitHeight + PlasmaCore.Units.largeSpacing * 2
+            radius: PlasmaCore.Units.smallSpacing * 2
+            color: root.withAlpha(PlasmaCore.Theme.textColor, 0.04)
+            border.width: 1
+            border.color: root.withAlpha(PlasmaCore.Theme.textColor, 0.08)
+
+            ColumnLayout {
+                id: diskBody
+                anchors.fill: parent
+                anchors.margins: PlasmaCore.Units.largeSpacing
+                spacing: PlasmaCore.Units.smallSpacing * 2
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: PlasmaCore.Units.smallSpacing
+                    spacing: PlasmaCore.Units.smallSpacing * 2
+                    PlasmaComponents3.Label {
+                        text: "Stockage"
+                        font.weight: Font.DemiBold
+                    }
+                    PlasmaComponents3.Label {
+                        Layout.fillWidth: true
+                        text: {
+                            var n = root.popupDisks.length
+                            return n + (n > 1 ? " éléments suivis" : " élément suivi")
+                        }
+                        elide: Text.ElideRight
+                        opacity: 0.6
+                        font: PlasmaCore.Theme.smallestFont
+                    }
+                }
+
+                Repeater {
+                    model: root.popupDisks
+                    delegate: RowLayout {
+                        id: diskRow
+                        readonly property bool hasPct: modelData.pct >= 0
+                        Layout.fillWidth: true
+                        spacing: PlasmaCore.Units.largeSpacing
+                        PlasmaComponents3.Label {
+                            Layout.preferredWidth: PlasmaCore.Units.gridUnit * 5
+                            text: modelData.label
+                            elide: Text.ElideMiddle
+                            PlasmaComponents3.ToolTip.text: modelData.label
+                                + (modelData.kind !== "folder" ? ""
+                                   : modelData.base === "quota" ? " (taille du dossier / quota)"
+                                   : modelData.base === "disk" ? " (taille du dossier / taille du disque)"
+                                   : " (taille du dossier)")
+                            PlasmaComponents3.ToolTip.visible: rowHover.containsMouse
+                            MouseArea { id: rowHover; anchors.fill: parent; hoverEnabled: true }
+                        }
+                        // a folder without capacity yet (old cache, df failed): no track, just the size
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            implicitHeight: 6
+                            radius: 3
+                            color: root.withAlpha(PlasmaCore.Theme.textColor, diskRow.hasPct ? 0.12 : 0)
+                            Rectangle {
+                                visible: diskRow.hasPct
+                                height: parent.height
+                                radius: 3
+                                width: Math.max(height, parent.width * Math.min(100, modelData.pct) / 100)
+                                color: root.memColor(modelData.pct)
+                            }
+                        }
+                        Row {
+                            Layout.preferredWidth: PlasmaCore.Units.gridUnit * 6
+                            layoutDirection: Qt.RightToLeft
+                            PlasmaComponents3.Label {
+                                text: modelData.state !== "ok" ? ""
+                                      : modelData.total > 0 ? " / " + root.sizeText(modelData.total)
+                                      : " " + (root.diskUnitTio(modelData.size) ? "Tio" : "Gio")
+                                font: PlasmaCore.Theme.smallestFont
+                                opacity: 0.6
+                                anchors.baseline: diskUsed.baseline
+                            }
+                            PlasmaComponents3.Label {
+                                id: diskUsed
+                                text: modelData.state === "pending" ? "calcul…"
+                                      : modelData.state === "error" ? "indisponible"
+                                      : root.sizeNum(modelData.size, modelData.total > 0 ? modelData.total : modelData.size)
+                                opacity: modelData.state === "ok" ? 1 : 0.6
+                            }
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.preferredWidth: PlasmaCore.Units.gridUnit * 2
+                            horizontalAlignment: Text.AlignRight
+                            text: diskRow.hasPct ? Math.round(modelData.pct) + " %" : ""
+                            font.weight: Font.DemiBold
+                        }
+                    }
+                }
+            }
+        }
+
         component NetCard: Rectangle {
             id: netCard
             Layout.fillWidth: true
@@ -881,15 +1177,16 @@ Item {
         }
 
         Card {
-            visible: root.systemGroupOn
-            showTemp: root.cpuTempOn
+            visible: root.popupCpu || root.popupRam
+            showTemp: root.popupCpuTemp
+            subtitle: root.cpuName
             title: "Processeur"
             temp: root.cpuTemp
-            aVisible: root.showCpu
+            aVisible: root.popupCpu
             aLabel: "CPU"
             aValue: root.cpuPct
-            aDetail: root.freqDetail(root.cpuFreq)
-            bVisible: root.showRam
+            aDetail: root.popupFreq ? root.freqDetail(root.cpuFreq) : " "
+            bVisible: root.popupRam
             bLabel: "RAM"
             bValue: root.ramPct
             bDetail: root.ramDetail()
@@ -899,16 +1196,16 @@ Item {
         }
 
         Card {
-            visible: root.gpuGroupOn
-            showTemp: root.gpuTempOn && root.gpuOn
+            visible: root.popupGpu || root.popupVram
+            showTemp: root.popupGpuTemp && root.gpuAvail
             title: "Carte graphique"
             subtitle: root.gpuName
             temp: root.gpuTemp
-            aVisible: root.gpuOn
+            aVisible: root.popupGpu
             aLabel: "GPU"
             aValue: root.gpuPct
-            aDetail: root.freqDetail(root.gpuFreq)
-            bVisible: root.vramOn
+            aDetail: root.popupFreq ? root.freqDetail(root.gpuFreq) : " "
+            bVisible: root.popupVram
             bLabel: "VRAM"
             bValue: root.vramPct
             bDetail: root.vramDetail()
@@ -917,6 +1214,8 @@ Item {
             historyCaption: "GPU · " + full.historySpan
         }
 
-        NetCard { visible: root.netOn }
+        DiskCard { visible: root.popupDisk }
+
+        NetCard { visible: root.popupNet }
     }
 }

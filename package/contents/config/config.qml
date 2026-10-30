@@ -7,4 +7,14 @@ ConfigModel {
         icon: "preferences-system"
         source: "configGeneral.qml"
     }
+    ConfigCategory {
+        name: i18n("Affichage")
+        icon: "view-visible"
+        source: "configDisplay.qml"
+    }
+    ConfigCategory {
+        name: i18n("Stockage")
+        icon: "drive-harddisk"
+        source: "configStorage.qml"
+    }
 }

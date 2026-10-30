@@ -7,14 +7,7 @@ Kirigami.FormLayout {
 
     property int cfg_updateInterval
     property string cfg_gpuSource
-    property alias cfg_showCpu: showCpu.checked
-    property alias cfg_showGpu: showGpu.checked
-    property alias cfg_showRam: showRam.checked
-    property alias cfg_showVram: showVram.checked
-    property alias cfg_showNet: showNet.checked
     property alias cfg_netInterface: netIf.text
-    property alias cfg_showTemperatures: showTemps.checked
-    property alias cfg_autoHide: autoHide.checked
     property alias cfg_warningTemp: warnTemp.value
     property alias cfg_criticalTemp: critTemp.value
 
@@ -43,14 +36,6 @@ Kirigami.FormLayout {
         onActivated: page.cfg_gpuSource = model[index].value
     }
 
-    Item { Kirigami.FormData.isSection: true }
-
-    QQC2.CheckBox { id: showCpu; Kirigami.FormData.label: i18n("Afficher :"); text: "CPU" }
-    QQC2.CheckBox { id: showRam; text: "RAM" }
-    QQC2.CheckBox { id: showGpu; text: "GPU" }
-    QQC2.CheckBox { id: showVram; text: "VRAM" }
-    QQC2.CheckBox { id: showNet; text: i18n("Réseau (débit ↓ / ↑)") }
-
     QQC2.TextField {
         id: netIf
         Kirigami.FormData.label: i18n("Interface réseau :")
@@ -59,9 +44,6 @@ Kirigami.FormLayout {
     }
 
     Item { Kirigami.FormData.isSection: true }
-
-    QQC2.CheckBox { id: showTemps; text: i18n("Afficher les températures") }
-    QQC2.CheckBox { id: autoHide; text: i18n("Masquer les mesures indisponibles sur ce PC") }
 
     QQC2.SpinBox {
         id: warnTemp

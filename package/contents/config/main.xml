@@ -6,15 +6,36 @@
   <group name="General">
     <entry name="updateInterval" type="Int"><default>2000</default><min>500</min><max>10000</max></entry>
     <entry name="gpuSource" type="String"><default>auto</default></entry>
-    <entry name="showCpu" type="Bool"><default>true</default></entry>
-    <entry name="showGpu" type="Bool"><default>true</default></entry>
-    <entry name="showRam" type="Bool"><default>true</default></entry>
-    <entry name="showVram" type="Bool"><default>true</default></entry>
-    <entry name="showNet" type="Bool"><default>true</default></entry>
     <entry name="netInterface" type="String"><default></default></entry>
-    <entry name="showTemperatures" type="Bool"><default>true</default></entry>
-    <entry name="autoHide" type="Bool"><default>true</default></entry>
     <entry name="warningTemp" type="Int"><default>70</default></entry>
     <entry name="criticalTemp" type="Int"><default>85</default></entry>
+  </group>
+  <group name="Display">
+    <entry name="cpuPanel" type="Bool"><default>true</default></entry>
+    <entry name="cpuPopup" type="Bool"><default>true</default></entry>
+    <entry name="tempPanel" type="Bool"><default>true</default></entry>
+    <entry name="tempPopup" type="Bool"><default>true</default></entry>
+    <entry name="freqPopup" type="Bool"><default>true</default></entry>
+    <entry name="ramPanel" type="Bool"><default>true</default></entry>
+    <entry name="ramPopup" type="Bool"><default>true</default></entry>
+    <entry name="amountsPanel" type="Bool"><default>true</default></entry>
+    <entry name="gpuPanel" type="Bool"><default>true</default></entry>
+    <entry name="gpuPopup" type="Bool"><default>true</default></entry>
+    <entry name="vramPanel" type="Bool"><default>true</default></entry>
+    <entry name="vramPopup" type="Bool"><default>true</default></entry>
+    <entry name="diskPanel" type="Bool"><default>true</default></entry>
+    <entry name="diskPopup" type="Bool"><default>true</default></entry>
+    <entry name="netPanel" type="Bool"><default>true</default></entry>
+    <entry name="netPopup" type="Bool"><default>true</default></entry>
+    <entry name="autoHide" type="Bool"><default>true</default></entry>
+  </group>
+  <group name="Storage">
+    <!-- JSON: { "<mount>": { "panel": bool, "popup": bool } } for detected partitions;
+         missing entries default to panel = (mount is "/"), popup = true -->
+    <entry name="diskPrefs" type="String"><default>{}</default></entry>
+    <!-- JSON: [ { "kind": "folder"|"mount", "path": "...", "quota": Gio (folders, 0 = none),
+                   "panel": bool, "popup": bool } ] -->
+    <entry name="customPaths" type="String"><default>[]</default></entry>
+    <entry name="folderRefresh" type="Int"><default>5</default><min>1</min><max>1440</max></entry>
   </group>
 </kcfg>

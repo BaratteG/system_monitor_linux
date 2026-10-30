@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Usage: sysstats.sh [auto|nvidia|amd] [network interface, empty = auto]
+#                    [tracked paths] [folder refresh, seconds]
+#   tracked paths: one "m|/path" (filesystem usage) or "f|/path" (folder size)
+#   per line
 # Prints one line: key=value;key=value;...  (missing values: -1 or empty)
 src="${1:-auto}"
 net_if_cfg="${2:-}"
+tracked="${3:-}"
+folder_refresh="${4:-300}"
 LC_ALL=C
 
 read -r _ u n s idle iow irq sirq st _ < /proc/stat
@@ -69,6 +74,19 @@ case "$cpu_temp_m" in
   ''|*[!0-9-]*) ;;
   *) cpu_temp=$(awk -v v="$cpu_temp_m" 'BEGIN{ if (v > 0) printf "%.1f", v/1000; else print -1 }') ;;
 esac
+
+cpu_name=$(grep -m1 '^model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//;s/[;|]/ /g')
+
+# local filesystems on a real device: "mount:usedKiB:availKiB|..."
+# df -l never touches network mounts (an unreachable NAS would block);
+# /boot* and duplicate devices (btrfs subvolumes, bind mounts) are skipped
+disks=$(timeout 2 df -lPk -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs 2>/dev/null \
+  | awk 'NR > 1 && $1 ~ "^/dev/" {
+      m = $6; for (i = 7; i <= NF; i++) m = m " " $i
+      if (m ~ "^/boot" || seen[$1]++) next
+      gsub(/[;|:]/, "_", m)
+      printf "%s%s:%s:%s", (n++ ? "|" : ""), m, $3, $4
+    }')
 
 # average current frequency over all threads, MHz
 cpu_freq=$(cat /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq 2>/dev/null \
@@ -151,4 +169,44 @@ for i in /sys/class/net/*; do
   net_names="${net_names:+$net_names, }$n"
 done
 
-echo "cpuTotal=$cpu_total;cpuIdle=$cpu_idle;cpuTemp=$cpu_temp;cpuFreq=$cpu_freq;memTotal=$mem_total;memAvail=$mem_avail;gpuUse=$gpu_use;gpuTemp=$gpu_temp;gpuFreq=$gpu_freq;vramUsed=$vram_used;vramTotal=$vram_total;gpuName=$gpu_name;gpuKind=$gpu_kind;netRx=$net_rx;netTx=$net_tx;netIf=$net_names"
+# tracked paths are measured in the background and cached, so a big folder
+# (du) or a hung network mount never blocks this script; each run reports
+# the cached value ("idx:a:b:age", a/b = usedKiB:availKiB for a mount,
+# sizeKiB:filesystemSizeKiB for a folder, -1 = not measured yet,
+# -2 = unavailable) and starts a refresh when stale
+custom=""
+if [ -n "$tracked" ]; then
+  cache_dir="${XDG_RUNTIME_DIR:-/tmp}/sysmonitor-bar-$(id -u)"
+  mkdir -p "$cache_dir"
+  now=$(date +%s)
+  idx=0
+  while IFS= read -r spec; do
+    [ -n "$spec" ] || continue
+    kind=${spec%%|*}; path=${spec#*|}
+    c="$cache_dir/$(printf '%s' "$spec" | md5sum | cut -c1-16)"
+    val="-1:-1"; age=-1
+    if [ -f "$c" ]; then val=$(cat "$c"); age=$((now - $(stat -c %Y "$c"))); fi
+    if [ "$kind" = f ]; then refresh=$folder_refresh; else refresh=10; fi
+    # a lock left by a killed job expires after 20 min
+    if [ -d "$c.lock" ] && [ $((now - $(stat -c %Y "$c.lock"))) -gt 1200 ]; then rmdir "$c.lock" 2>/dev/null; fi
+    if { [ "$age" -lt 0 ] || [ "$age" -ge "$refresh" ]; } && mkdir "$c.lock" 2>/dev/null; then
+      setsid bash -c '
+        kind=$1 path=$2 c=$3
+        if [ ! -d "$path" ]; then out="-2:-2"
+        elif [ "$kind" = f ]; then
+          s=$(nice -n 19 ionice -c3 timeout 900 du -skx -- "$path" 2>/dev/null | cut -f1)
+          t=$(timeout 10 df -Pk -- "$path" 2>/dev/null | awk "NR == 2 { print \$2 }")
+          out="${s:--2}:${t:--1}"
+        else
+          out=$(timeout 10 df -Pk -- "$path" 2>/dev/null | awk "NR == 2 { print \$3 \":\" \$4 }")
+          out=${out:--2:-2}
+        fi
+        printf "%s\n" "$out" > "$c.tmp" && mv "$c.tmp" "$c"
+        rmdir "$c.lock"' _ "$kind" "$path" "$c" </dev/null >/dev/null 2>&1 &
+    fi
+    custom="${custom:+$custom|}$idx:$val:$age"
+    idx=$((idx + 1))
+  done <<< "$tracked"
+fi
+
+echo "cpuTotal=$cpu_total;cpuIdle=$cpu_idle;cpuTemp=$cpu_temp;cpuFreq=$cpu_freq;memTotal=$mem_total;memAvail=$mem_avail;gpuUse=$gpu_use;gpuTemp=$gpu_temp;gpuFreq=$gpu_freq;vramUsed=$vram_used;vramTotal=$vram_total;gpuName=$gpu_name;gpuKind=$gpu_kind;netRx=$net_rx;netTx=$net_tx;netIf=$net_names;cpuName=$cpu_name;disks=$disks;custom=$custom;home=$HOME"
