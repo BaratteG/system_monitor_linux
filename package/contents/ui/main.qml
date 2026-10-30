@@ -309,9 +309,11 @@ Item {
         if (v >= warnTemp) return PlasmaCore.Theme.neutralTextColor
         return PlasmaCore.Theme.positiveTextColor
     }
-    function memColor(v) {
-        if (v >= 95) return PlasmaCore.Theme.negativeTextColor
-        if (v >= 85) return PlasmaCore.Theme.neutralTextColor
+    // usage bars and gauges: blue < 25 %, green < 50 %, orange < 80 %, red from 80 %
+    function usageColor(v) {
+        if (v >= 80) return PlasmaCore.Theme.negativeTextColor
+        if (v >= 50) return PlasmaCore.Theme.neutralTextColor
+        if (v >= 25) return PlasmaCore.Theme.positiveTextColor
         return PlasmaCore.Theme.highlightColor
     }
 
@@ -479,7 +481,7 @@ Item {
                         height: parent.height
                         radius: 1
                         width: parent.width * Math.max(0, Math.min(100, dcell.item.pct)) / 100
-                        color: root.memColor(dcell.item.pct)
+                        color: root.usageColor(dcell.item.pct)
                     }
                 }
             }
@@ -510,7 +512,7 @@ Item {
             id: cell
             property string label
             property real value: -1
-            property color barColor: PlasmaCore.Theme.highlightColor
+            property color barColor: root.usageColor(value)
             property bool hasTemp: false
             property real temp: -1
             property string amount: ""   // used memory, shown in Gio after the percent
@@ -640,7 +642,6 @@ Item {
             Cell {
                 visible: root.panelRam
                 label: "RAM"; value: root.ramPct
-                barColor: root.memColor(root.ramPct)
                 amount: root.panelAmounts ? root.gioShort(root.memTotal > 0 ? root.memUsed : -1) : ""
                 amountTotal: root.gioTotal(root.memTotal)
             }
@@ -662,7 +663,6 @@ Item {
             Cell {
                 visible: root.panelVram
                 label: "VRAM"; value: root.vramPct
-                barColor: root.memColor(root.vramPct)
                 amount: root.panelAmounts ? root.gioShort(root.valid(root.vramPct) ? root.vramUsed : -1) : ""
                 amountTotal: root.gioTotal(root.vramTotal)
             }
@@ -979,7 +979,7 @@ Item {
                                 height: parent.height
                                 radius: 3
                                 width: Math.max(height, parent.width * Math.min(100, modelData.pct) / 100)
-                                color: root.memColor(modelData.pct)
+                                color: root.usageColor(modelData.pct)
                             }
                         }
                         Row {
@@ -1091,7 +1091,7 @@ Item {
             property string bLabel
             property real bValue: -1
             property string bDetail
-            property color bColor: PlasmaCore.Theme.highlightColor
+            property color bColor: root.usageColor(bValue)
             property var history: []
             property string historyCaption
 
@@ -1155,6 +1155,7 @@ Item {
                         Layout.alignment: Qt.AlignTop
                         visible: card.aVisible
                         label: card.aLabel; value: card.aValue; detail: card.aDetail
+                        color: root.usageColor(card.aValue)
                     }
                     Gauge {
                         Layout.alignment: Qt.AlignTop
@@ -1192,7 +1193,6 @@ Item {
             bLabel: "RAM"
             bValue: root.ramPct
             bDetail: root.ramDetail()
-            bColor: root.memColor(root.ramPct)
             history: root.cpuHistory
             historyCaption: "CPU · " + full.historySpan
         }
@@ -1211,7 +1211,6 @@ Item {
             bLabel: "VRAM"
             bValue: root.vramPct
             bDetail: root.vramDetail()
-            bColor: root.memColor(root.vramPct)
             history: root.gpuHistory
             historyCaption: "GPU · " + full.historySpan
         }
