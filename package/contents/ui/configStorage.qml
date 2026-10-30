@@ -164,55 +164,67 @@ ColumnLayout {
                    + "Le pourcentage d'un dossier est sa part de la taille du disque qui le contient, ou de son quota s'il en a un.")
     }
 
+    // two lines per entry so it fits the narrow config dialog:
+    // kind, path, browse, remove / quota, panel, popup
     Repeater {
         model: page.items
-        delegate: RowLayout {
+        delegate: ColumnLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
-            QQC2.ComboBox {
-                model: [i18n("Dossier"), i18n("Point de montage")]
-                currentIndex: modelData.kind === "mount" ? 1 : 0
-                onActivated: page.updateItem(index, "kind", currentIndex === 1 ? "mount" : "folder")
-            }
-            QQC2.TextField {
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.minimumWidth: Kirigami.Units.gridUnit * 10
-                text: modelData.path
-                placeholderText: i18n("/chemin/vers/dossier")
-                onEditingFinished: if (text !== modelData.path) page.updateItem(index, "path", text)
+                spacing: Kirigami.Units.smallSpacing
+                QQC2.ComboBox {
+                    id: kindCombo
+                    model: [i18n("Dossier"), i18n("Point de montage")]
+                    currentIndex: modelData.kind === "mount" ? 1 : 0
+                    onActivated: page.updateItem(index, "kind", currentIndex === 1 ? "mount" : "folder")
+                }
+                QQC2.TextField {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: Kirigami.Units.gridUnit * 6
+                    text: modelData.path
+                    placeholderText: i18n("/chemin/vers/dossier")
+                    onEditingFinished: if (text !== modelData.path) page.updateItem(index, "path", text)
+                }
+                QQC2.ToolButton {
+                    icon.name: "document-open-folder"
+                    QQC2.ToolTip.text: i18n("Parcourir…")
+                    QQC2.ToolTip.visible: hovered
+                    onClicked: { folderDialog.target = index; folderDialog.open() }
+                }
+                QQC2.ToolButton {
+                    icon.name: "edit-delete"
+                    QQC2.ToolTip.text: i18n("Retirer")
+                    QQC2.ToolTip.visible: hovered
+                    onClicked: page.removeItem(index)
+                }
             }
-            QQC2.ToolButton {
-                icon.name: "document-open-folder"
-                QQC2.ToolTip.text: i18n("Parcourir…")
-                QQC2.ToolTip.visible: hovered
-                onClicked: { folderDialog.target = index; folderDialog.open() }
-            }
-            QQC2.SpinBox {
-                visible: modelData.kind !== "mount"
-                from: 0; to: 100000
-                value: modelData.quota || 0
-                textFromValue: function (v) { return v === 0 ? i18n("% du disque") : v + " Gio" }
-                valueFromText: function (t) { var n = parseInt(t); return isNaN(n) ? 0 : n }
-                onValueModified: page.updateItem(index, "quota", value)
-                QQC2.ToolTip.text: i18n("Quota en Gio : le pourcentage est calculé sur ce quota au lieu de la taille du disque")
-                QQC2.ToolTip.visible: hovered
-            }
-            QQC2.CheckBox {
-                text: i18n("Panneau")
-                checked: !!modelData.panel
-                onToggled: page.updateItem(index, "panel", checked)
-            }
-            QQC2.CheckBox {
-                text: i18n("Popup")
-                checked: modelData.popup !== false
-                onToggled: page.updateItem(index, "popup", checked)
-            }
-            QQC2.ToolButton {
-                icon.name: "edit-delete"
-                QQC2.ToolTip.text: i18n("Retirer")
-                QQC2.ToolTip.visible: hovered
-                onClicked: page.removeItem(index)
+            RowLayout {
+                Layout.leftMargin: kindCombo.width + Kirigami.Units.smallSpacing
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
+                spacing: Kirigami.Units.largeSpacing
+                QQC2.SpinBox {
+                    visible: modelData.kind !== "mount"
+                    from: 0; to: 100000
+                    value: modelData.quota || 0
+                    textFromValue: function (v) { return v === 0 ? i18n("% du disque") : v + " Gio" }
+                    valueFromText: function (t) { var n = parseInt(t); return isNaN(n) ? 0 : n }
+                    onValueModified: page.updateItem(index, "quota", value)
+                    QQC2.ToolTip.text: i18n("Quota en Gio : le pourcentage est calculé sur ce quota au lieu de la taille du disque")
+                    QQC2.ToolTip.visible: hovered
+                }
+                QQC2.CheckBox {
+                    text: i18n("Panneau")
+                    checked: !!modelData.panel
+                    onToggled: page.updateItem(index, "panel", checked)
+                }
+                QQC2.CheckBox {
+                    text: i18n("Popup")
+                    checked: modelData.popup !== false
+                    onToggled: page.updateItem(index, "popup", checked)
+                }
             }
         }
     }
