@@ -216,6 +216,8 @@ Item {
         while (v >= 999.5 && i < 3) { v /= 1000; i++ }
         return units[i]
     }
+    // panel form: the arrows already say "per second"
+    function rateUnitShort(bps) { return rateUnit(bps).charAt(0).replace("o", "K") }
     function rateText(bps) { return rateNum(bps) + " " + rateUnit(bps) }
     function bytesText(b) {
         if (!valid(b)) return "--"
@@ -257,9 +259,8 @@ Item {
         TextMetrics { id: tmUnit; font: PlasmaCore.Theme.smallestFont; text: "%" }
         TextMetrics { id: tmTemp; font: PlasmaCore.Theme.defaultFont; text: "100°" }
         TextMetrics { id: tmAmount; font: PlasmaCore.Theme.defaultFont; text: "99.9" }
-        TextMetrics { id: tmLabel; font: PlasmaCore.Theme.smallestFont; text: "VRAM" }
         TextMetrics { id: tmRate; font: PlasmaCore.Theme.defaultFont; text: "999" }
-        TextMetrics { id: tmRateUnit; font: PlasmaCore.Theme.smallestFont; text: "Mo/s" }
+        TextMetrics { id: tmRateUnit; font: PlasmaCore.Theme.smallestFont; text: "M" }
 
         // one direction of network traffic: colored arrow, value, unit
         component Rate: ColumnLayout {
@@ -285,10 +286,11 @@ Item {
                     horizontalAlignment: Text.AlignRight
                 }
                 PlasmaComponents3.Label {
-                    text: " " + root.rateUnit(rate.value)
+                    text: root.rateUnitShort(rate.value)
                     font: PlasmaCore.Theme.smallestFont
                     opacity: 0.6
-                    width: tmRateUnit.width + 3
+                    width: tmRateUnit.width + 2
+                    horizontalAlignment: Text.AlignRight
                     height: rateNum.height
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -307,13 +309,12 @@ Item {
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                 font.letterSpacing: 0.6
                 opacity: 0.6
-                Layout.preferredWidth: compact.tall ? -1 : tmLabel.width + 2
                 Layout.preferredHeight: tmRate.height
                 Layout.alignment: compact.tall ? Qt.AlignLeft : (Qt.AlignTop | Qt.AlignLeft)
                 verticalAlignment: Text.AlignVCenter
             }
             RowLayout {
-                spacing: PlasmaCore.Units.smallSpacing * 2
+                spacing: PlasmaCore.Units.smallSpacing * 1.5
                 Rate { arrow: "↓"; arrowColor: root.downColor; value: root.netDown }
                 Rate { arrow: "↑"; arrowColor: root.upColor; value: root.netUp }
             }
@@ -338,14 +339,13 @@ Item {
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                 font.letterSpacing: 0.6
                 opacity: 0.6
-                Layout.preferredWidth: compact.tall ? -1 : tmLabel.width + 2
                 Layout.preferredHeight: numLabel.implicitHeight
                 Layout.alignment: compact.tall ? Qt.AlignLeft : (Qt.AlignTop | Qt.AlignLeft)
                 verticalAlignment: Text.AlignVCenter
             }
 
             RowLayout {
-                spacing: PlasmaCore.Units.smallSpacing * 1.5
+                spacing: PlasmaCore.Units.smallSpacing
 
                 ColumnLayout {
                     spacing: 2
@@ -409,11 +409,12 @@ Item {
                     }
                     PlasmaComponents3.Label {
                         visible: cell.amountTotal !== ""
-                        text: " / " + cell.amountTotal
+                        text: "/" + cell.amountTotal
                         opacity: 0.5
                     }
                     PlasmaComponents3.Label {
-                        text: " Gio"
+                        text: "G"
+                        leftPadding: 1
                         font: PlasmaCore.Theme.smallestFont
                         opacity: 0.6
                         height: amountNum.height
@@ -438,7 +439,7 @@ Item {
             flow: compact.vertical ? Grid.TopToBottom : Grid.LeftToRight
             rows: compact.vertical ? -1 : 1
             columns: compact.vertical ? 1 : -1
-            columnSpacing: PlasmaCore.Units.largeSpacing
+            columnSpacing: PlasmaCore.Units.smallSpacing * 2
             rowSpacing: PlasmaCore.Units.smallSpacing * 2
             verticalItemAlignment: Grid.AlignVCenter
             horizontalItemAlignment: Grid.AlignHCenter
