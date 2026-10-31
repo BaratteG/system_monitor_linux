@@ -24,6 +24,10 @@ Item {
     property real cpuTemp: -1
     property real cpuFreq: -1     // MHz, average over all threads
     property real gpuFreq: -1     // MHz, graphics clock
+    property real cpuPower: -1    // W, whole CPU package (RAPL, needs enable-cpu-power.sh)
+    property real gpuPower: -1    // W
+    property real prevEnergy: -1  // µJ, RAPL counter of the previous sample
+    property real prevEnergyMs: 0 // script timestamp of that sample
     property real gpuPct: -1
     property real gpuTemp: -1
     property real memTotal: 0     // MiB
@@ -58,6 +62,8 @@ Item {
     property int diskMisses: 0
     property int cpuTempMisses: 0
     property int gpuTempMisses: 0
+    property int cpuPowerMisses: 0
+    property int gpuPowerMisses: 0
     function avail(misses) { return !autoHide || misses < missLimit }
 
     // data available on this machine (auto-hide)
@@ -84,6 +90,8 @@ Item {
     readonly property bool popupVram: cfg.vramPopup && vramAvail
     readonly property bool popupCpuTemp: cfg.tempPopup && cpuTempAvail
     readonly property bool popupGpuTemp: cfg.tempPopup && gpuTempAvail
+    readonly property bool popupCpuPower: cfg.powerPopup && avail(cpuPowerMisses)
+    readonly property bool popupGpuPower: cfg.powerPopup && avail(gpuPowerMisses)
     readonly property bool popupFreq: cfg.freqPopup
     readonly property bool popupThreads: cfg.threadsPopup && threadsTotal > 0
     readonly property bool popupDisk: cfg.diskPopup && popupDisks.length > 0
@@ -205,6 +213,20 @@ Item {
         cpuTemp = parseFloat(d.cpuTemp)
         cpuFreq = d.cpuFreq !== undefined ? parseFloat(d.cpuFreq) : -1
         gpuFreq = d.gpuFreq !== undefined ? parseFloat(d.gpuFreq) : -1
+        gpuPower = d.gpuPower !== undefined ? parseFloat(d.gpuPower) : -1
+        // CPU power: energy delta over the script's own timestamps; a counter
+        // that went backwards (wrap) skips the sample and keeps the last value
+        var en = d.cpuEnergy !== undefined ? parseFloat(d.cpuEnergy) : -1
+        var enMs = parseFloat(d.cpuEnergyMs)
+        if (isNaN(en) || en < 0) {
+            cpuPower = -1
+            prevEnergy = -1
+        } else {
+            if (prevEnergy >= 0 && en >= prevEnergy && enMs > prevEnergyMs)
+                cpuPower = (en - prevEnergy) / (enMs - prevEnergyMs) / 1000
+            prevEnergy = en
+            prevEnergyMs = enMs
+        }
         memTotal = parseFloat(d.memTotal)
         memUsed = memTotal - parseFloat(d.memAvail)
         gpuPct = parseFloat(d.gpuUse)
@@ -235,6 +257,8 @@ Item {
         vramMisses = vramTotal > 0 ? 0 : vramMisses + 1
         cpuTempMisses = valid(cpuTemp) ? 0 : cpuTempMisses + 1
         gpuTempMisses = valid(gpuTemp) ? 0 : gpuTempMisses + 1
+        cpuPowerMisses = valid(cpuPower) ? 0 : cpuPowerMisses + 1
+        gpuPowerMisses = valid(gpuPower) ? 0 : gpuPowerMisses + 1
         if (cpuPct >= 0) cpuHistory = pushHistory(cpuHistory, cpuPct)
         if (gpuPct >= 0) gpuHistory = pushHistory(gpuHistory, gpuPct)
 
@@ -406,6 +430,7 @@ Item {
     function threadsText() { return (threadsBusy >= 0 ? threadsBusy : "--") + "/" + threadsTotal + " threads" }
     function ghz(mhz) { return valid(mhz) ? (mhz / 1000).toFixed(2) + " GHz" : "-- GHz" }
     function tempText(v) { return valid(v) ? Math.round(v) + " °C" : "-- °C" }
+    function powerText(v) { return valid(v) ? Math.round(v) + " W" : "-- W" }
 
     // network rates: decimal units, Ko/s minimum, 3 significant chars
     readonly property color downColor: PlasmaCore.Theme.highlightColor
@@ -437,11 +462,12 @@ Item {
     Plasmoid.toolTipSubText: {
         var lines = []
         var t = function (on, v) { return on ? " · " + tempText(v) : "" }
+        var w = function (on, v) { return on ? " · " + powerText(v) : "" }
         var f = function (v) { return popupFreq && (valid(v) || !autoHide) ? " · " + ghz(v) : "" }
-        if (popupCpu) lines.push("CPU  " + num(cpuPct) + " %" + t(popupCpuTemp, cpuTemp) + f(cpuFreq)
+        if (popupCpu) lines.push("CPU  " + num(cpuPct) + " %" + t(popupCpuTemp, cpuTemp) + w(popupCpuPower, cpuPower) + f(cpuFreq)
                                  + (popupThreads ? " · " + threadsText() : ""))
         if (popupRam) lines.push("RAM  " + num(ramPct) + " % · " + ramDetail())
-        if (popupGpu) lines.push("GPU  " + num(gpuPct) + " %" + t(popupGpuTemp, gpuTemp) + f(gpuFreq))
+        if (popupGpu) lines.push("GPU  " + num(gpuPct) + " %" + t(popupGpuTemp, gpuTemp) + w(popupGpuPower && gpuAvail, gpuPower) + f(gpuFreq))
         if (popupVram) lines.push("VRAM  " + num(vramPct) + " % · " + vramDetail())
         if (popupNet) lines.push("Réseau  ↓ " + rateText(netDown) + " · ↑ " + rateText(netUp))
         if (popupDisk) lines.push("Stockage  " + popupDisks.map(function (d) {
@@ -1586,6 +1612,8 @@ Item {
             property string subtitle
             property real temp: -1
             property bool showTemp: true
+            property real power: -1
+            property bool showPower: false
             property bool aVisible: true
             property string aLabel
             property real aValue: -1
@@ -1616,7 +1644,7 @@ Item {
                 anchors.margins: PlasmaCore.Units.largeSpacing
                 spacing: PlasmaCore.Units.largeSpacing
 
-                // header: title, subtitle, temperature pill
+                // header: title, subtitle, power pill, temperature pill
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: PlasmaCore.Units.smallSpacing * 2
@@ -1630,6 +1658,19 @@ Item {
                         elide: Text.ElideRight
                         opacity: 0.6
                         font: PlasmaCore.Theme.smallestFont
+                    }
+                    Rectangle {
+                        visible: card.showPower
+                        implicitWidth: powerLabel.implicitWidth + PlasmaCore.Units.smallSpacing * 4
+                        implicitHeight: powerLabel.implicitHeight + PlasmaCore.Units.smallSpacing
+                        radius: height / 2
+                        color: root.withAlpha(PlasmaCore.Theme.textColor, 0.07)
+                        PlasmaComponents3.Label {
+                            id: powerLabel
+                            anchors.centerIn: parent
+                            text: root.powerText(card.power)
+                            font.weight: Font.DemiBold
+                        }
                     }
                     Rectangle {
                         visible: card.showTemp
@@ -1949,6 +1990,8 @@ Item {
                     visible: root.popupCpu || root.popupRam
                     procTarget: "cpu"
                     showTemp: root.popupCpuTemp
+                    showPower: root.popupCpuPower
+                    power: root.cpuPower
                     subtitle: root.cpuName
                     title: "Processeur"
                     temp: root.cpuTemp
@@ -1973,6 +2016,8 @@ Item {
                     visible: root.popupGpu || root.popupVram
                     procTarget: "gpu"
                     showTemp: root.popupGpuTemp && root.gpuAvail
+                    showPower: root.popupGpuPower && root.gpuAvail
+                    power: root.gpuPower
                     title: "Carte graphique"
                     subtitle: root.gpuName
                     temp: root.gpuTemp

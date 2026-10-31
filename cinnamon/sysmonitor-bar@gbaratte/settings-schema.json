@@ -35,7 +35,7 @@
         "section-popup": {
             "type": "section",
             "title": "Popup",
-            "keys": ["cpuPopup", "tempPopup", "freqPopup", "threadsPopup", "ramPopup", "gpuPopup", "vramPopup", "netPopup", "diskPopup"]
+            "keys": ["cpuPopup", "tempPopup", "freqPopup", "powerPopup", "threadsPopup", "ramPopup", "gpuPopup", "vramPopup", "netPopup", "diskPopup"]
         },
         "section-behaviour": {
             "type": "section",
@@ -110,6 +110,7 @@
     "cpuPopup": { "type": "switch", "default": true, "description": "CPU (utilisation)" },
     "tempPopup": { "type": "switch", "default": true, "description": "Températures CPU et GPU" },
     "freqPopup": { "type": "switch", "default": true, "description": "Fréquences CPU et GPU" },
+    "powerPopup": { "type": "switch", "default": true, "description": "Consommation CPU et GPU (W)" },
     "threadsPopup": { "type": "switch", "default": true, "description": "Usage de chaque thread CPU (blocs)" },
     "ramPopup": { "type": "switch", "default": true, "description": "RAM" },
     "gpuPopup": { "type": "switch", "default": true, "description": "GPU (utilisation)" },

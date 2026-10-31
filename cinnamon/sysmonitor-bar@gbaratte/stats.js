@@ -104,6 +104,7 @@ function bytesText(b) {
 
 function ghz(mhz) { return valid(mhz) ? (mhz / 1000).toFixed(2) + ' GHz' : '-- GHz'; }
 function tempText(v) { return valid(v) ? Math.round(v) + ' °C' : '-- °C'; }
+function powerText(v) { return valid(v) ? Math.round(v) + ' W' : '-- W'; }
 
 // temperatures are states -> status colors; null keeps the theme text color
 function tempColor(v, cfg) {
@@ -187,6 +188,8 @@ class SysStats {
         this.cpuTemp = -1;
         this.cpuFreq = -1;      // MHz, average over all threads
         this.gpuFreq = -1;      // MHz, graphics clock
+        this.cpuPower = -1;     // W, whole CPU package (RAPL, needs enable-cpu-power.sh)
+        this.gpuPower = -1;     // W
         this.gpuPct = -1;
         this.gpuTemp = -1;
         this.memTotal = 0;      // MiB
@@ -213,6 +216,8 @@ class SysStats {
         this.netMisses = 0;
         this.cpuTempMisses = 0;
         this.gpuTempMisses = 0;
+        this.cpuPowerMisses = 0;
+        this.gpuPowerMisses = 0;
 
         // usage history for the popup sparklines (oldest first)
         this.cpuHistory = [];
@@ -226,6 +231,8 @@ class SysStats {
         this._prevRx = -1;
         this._prevTx = -1;
         this._prevNetTime = 0;
+        this._prevEnergy = -1;    // µJ, RAPL counter of the previous sample
+        this._prevEnergyMs = 0;   // script timestamp of that sample
     }
 
     get ramPct() { return this.memTotal > 0 ? 100 * this.memUsed / this.memTotal : -1; }
@@ -261,6 +268,7 @@ class SysStats {
         this.gpuPct = parseFloat(d.gpuUse);
         this.gpuTemp = parseFloat(d.gpuTemp);
         this.gpuFreq = d.gpuFreq !== undefined ? parseFloat(d.gpuFreq) : -1;
+        this.gpuPower = d.gpuPower !== undefined ? parseFloat(d.gpuPower) : -1;
         this.vramUsed = parseFloat(d.vramUsed);
         this.vramTotal = parseFloat(d.vramTotal);
         this.gpuName = d.gpuName || '';
@@ -271,6 +279,8 @@ class SysStats {
         this.vramMisses = this.vramTotal > 0 ? 0 : this.vramMisses + 1;
         this.cpuTempMisses = valid(this.cpuTemp) ? 0 : this.cpuTempMisses + 1;
         this.gpuTempMisses = valid(this.gpuTemp) ? 0 : this.gpuTempMisses + 1;
+        this.cpuPowerMisses = valid(this.cpuPower) ? 0 : this.cpuPowerMisses + 1;
+        this.gpuPowerMisses = valid(this.gpuPower) ? 0 : this.gpuPowerMisses + 1;
         if (this.cpuPct >= 0) this.cpuHistory = pushHistory(this.cpuHistory, this.cpuPct);
         if (this.gpuPct >= 0) this.gpuHistory = pushHistory(this.gpuHistory, this.gpuPct);
 
@@ -310,6 +320,21 @@ class SysStats {
         this.cpuTemp = parseFloat(d.cpuTemp);
         this.cpuFreq = d.cpuFreq !== undefined ? parseFloat(d.cpuFreq) : -1;
         this.cpuName = cleanCpuName(d.cpuName || '');
+
+        // CPU power: energy delta over the script's own timestamps; a counter
+        // that went backwards (wrap) skips the sample and keeps the last value
+        const en = d.cpuEnergy !== undefined ? parseFloat(d.cpuEnergy) : -1;
+        const enMs = parseFloat(d.cpuEnergyMs);
+        if (isNaN(en) || en < 0) {
+            this.cpuPower = -1;
+            this._prevEnergy = -1;
+        } else {
+            if (this._prevEnergy >= 0 && en >= this._prevEnergy && enMs > this._prevEnergyMs) {
+                this.cpuPower = (en - this._prevEnergy) / (enMs - this._prevEnergyMs) / 1000;
+            }
+            this._prevEnergy = en;
+            this._prevEnergyMs = enMs;
+        }
     }
 
     _updateStorage(d) {
@@ -578,6 +603,8 @@ function displayed(stats, cfg, storage) {
     const net = avail(stats.netMisses);
     const cpuTemp = avail(stats.cpuTempMisses);
     const gpuTemp = avail(stats.gpuTempMisses);
+    const cpuPower = avail(stats.cpuPowerMisses);
+    const gpuPower = avail(stats.gpuPowerMisses);
     const panelDisks = storage.filter(d => d.panel);
     const popupDisks = storage.filter(d => d.popup);
     return {
@@ -598,6 +625,8 @@ function displayed(stats, cfg, storage) {
         popupVram: cfg.vramPopup && vram,
         popupCpuTemp: cfg.tempPopup && cpuTemp,
         popupGpuTemp: cfg.tempPopup && gpuTemp,
+        popupCpuPower: cfg.powerPopup && cpuPower,
+        popupGpuPower: cfg.powerPopup && gpuPower && gpu,
         popupFreq: cfg.freqPopup,
         popupThreads: cfg.threadsPopup && stats.threadsTotal > 0,
         popupDisk: cfg.diskPopup && popupDisks.length > 0,
@@ -609,16 +638,17 @@ function freqDetail(mhz, cfg) { return valid(mhz) || !cfg.autoHide ? ghz(mhz) : 
 
 function tooltipText(stats, show, cfg) {
     const temp = (on, v) => (on ? ' · ' + tempText(v) : '');
+    const power = (on, v) => (on ? ' · ' + powerText(v) : '');
     const freq = v => (show.popupFreq && (valid(v) || !cfg.autoHide) ? ' · ' + ghz(v) : '');
     const lines = [];
     if (show.popupCpu) {
         lines.push('CPU  ' + num(stats.cpuPct) + ' %' + temp(show.popupCpuTemp, stats.cpuTemp)
-            + freq(stats.cpuFreq) + (show.popupThreads ? ' · ' + stats.threadsText() : ''));
+            + power(show.popupCpuPower, stats.cpuPower) + freq(stats.cpuFreq) + (show.popupThreads ? ' · ' + stats.threadsText() : ''));
     }
     if (show.popupRam) lines.push('RAM  ' + num(stats.ramPct) + ' % · ' + stats.ramDetail());
     if (show.popupGpu) {
         lines.push('GPU  ' + num(stats.gpuPct) + ' %' + temp(show.popupGpuTemp, stats.gpuTemp)
-            + freq(stats.gpuFreq));
+            + power(show.popupGpuPower, stats.gpuPower) + freq(stats.gpuFreq));
     }
     if (show.popupVram) lines.push('VRAM  ' + num(stats.vramPct) + ' % · ' + stats.vramDetail());
     if (show.popupNet) lines.push('Réseau  ↓ ' + rateText(stats.netDown) + ' · ↑ ' + rateText(stats.netUp));
@@ -666,6 +696,7 @@ module.exports = {
     storageItems,
     tempColor,
     tempDotColor,
+    powerText,
     tempText,
     threadBlockLayout,
     threadGridColumns,

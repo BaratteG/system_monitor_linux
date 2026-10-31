@@ -17,6 +17,7 @@ Widget de panneau pour **KDE Plasma 5.27** (plasmoid) et **Cinnamon 5.8** (apple
   Les chemins ajoutés à la main sont mesurés en arrière-plan et mis en cache dans `$XDG_RUNTIME_DIR` (points de montage toutes les 10 s, dossiers toutes les 5 min par défaut) : un gros dossier ou un NAS injoignable ne bloque jamais le relevé.
 - Réseau : débit ↓/↑ calculé depuis `/sys/class/net/*/statistics`. Par défaut, somme des interfaces physiques actives (exclut `lo`, ponts, docker, VPN). Interface réglable dans la configuration.
 - GPU NVIDIA (`nvidia-smi`) ou AMD (sysfs), détection automatique.
+- Consommation (en watts, dans les cartes du popup) : GPU via `nvidia-smi` ou amdgpu (sysfs) ; CPU via RAPL (`/sys/class/powercap`), paquet complet, calculée entre deux relevés. Les compteurs RAPL sont réservés à root (ils permettent des attaques par canal auxiliaire, voir PLATYPUS / CVE-2020-8694) : une étape unique, `sudo ./enable-cpu-power.sh`, installe un service systemd qui donne l'accès en lecture à ton seul utilisateur (celui de `sudo`), sans rien ouvrir aux autres. `sudo ./enable-cpu-power.sh --remove` annule tout. Sans cette étape, la consommation du CPU est masquée.
 - Température CPU, première source trouvée :
   - AMD (`k10temp`, `zenpower`) : `Tdie` si exposé, sinon `Tctl` corrigé du décalage des Ryzen 1000/2000 « X » et Threadripper 1000/2000 ;
   - Intel (`coretemp`) : le « Package id » le plus chaud (tous sockets) ;
@@ -44,7 +45,7 @@ kquitapp5 plasmashell && kstart5 plasmashell
 ## Configuration
 Clic droit sur le widget > Configurer (Cinnamon : « Configurer… ») :
 - **Général** : intervalle (500-10000 ms, défaut 2000), source GPU (auto/nvidia/amd), interface réseau (vide = auto), seuils de température d'alerte et critique.
-- **Affichage** : pour chaque mesure (CPU, températures, fréquences, blocs d'usage des threads, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
+- **Affichage** : pour chaque mesure (CPU, températures, fréquences, consommation, blocs d'usage des threads, RAM, quantités en Gio, GPU, VRAM, stockage, réseau), affichage dans le panneau et/ou le popup ; masquage des mesures indisponibles.
 - **Stockage** : partitions détectées à afficher dans le panneau et/ou le popup (par défaut `/` dans le panneau, toutes dans le popup) ; dossiers et points de montage suivis (chemin, quota optionnel pour les dossiers, panneau / popup) ; fréquence de recalcul de la taille des dossiers.
 
 Sous Cinnamon, les partitions détectées s'ajoutent toutes seules à la liste de l'onglet Stockage, et Panneau / Popup se cochent directement dans les listes. Les réglages sont propres à chaque instance de l'applet.

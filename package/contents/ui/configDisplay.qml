@@ -13,6 +13,7 @@ ColumnLayout {
     property alias cfg_tempPanel: tempPanel.checked
     property alias cfg_tempPopup: tempPopup.checked
     property alias cfg_freqPopup: freqPopup.checked
+    property alias cfg_powerPopup: powerPopup.checked
     property alias cfg_threadsPopup: threadsPopup.checked
     property alias cfg_ramPanel: ramPanel.checked
     property alias cfg_ramPopup: ramPopup.checked
@@ -47,6 +48,10 @@ ColumnLayout {
         QQC2.Label { text: i18n("Fréquences CPU et GPU") }
         QQC2.Label { text: "—"; opacity: 0.5; Layout.alignment: Qt.AlignHCenter }
         QQC2.CheckBox { id: freqPopup; Layout.alignment: Qt.AlignHCenter }
+
+        QQC2.Label { text: i18n("Consommation (W)") }
+        QQC2.Label { text: "—"; opacity: 0.5; Layout.alignment: Qt.AlignHCenter }
+        QQC2.CheckBox { id: powerPopup; Layout.alignment: Qt.AlignHCenter }
 
         QQC2.Label { text: i18n("Usage de chaque thread CPU (blocs)") }
         QQC2.Label { text: "—"; opacity: 0.5; Layout.alignment: Qt.AlignHCenter }

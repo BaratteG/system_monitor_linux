@@ -23,7 +23,7 @@ function subtitleLabel() {
     return actor;
 }
 
-// title, subtitle, temperature pill, process list arrow, two gauges and the usage history;
+// title, subtitle, power pill, temperature pill, process list arrow, two gauges and the usage history;
 // onThreadGraph(): the history gets a button swapping the curve for one graph per thread
 class Card {
     constructor(title, onArrow, onThreadGraph = null) {
@@ -32,6 +32,10 @@ class Card {
         const head = header(title);
         this._subtitle = subtitleLabel();
         head.add(this._subtitle, { expand: true, x_fill: true, y_fill: false, y_align: St.Align.MIDDLE });
+        this._powerPill = new St.BoxLayout({ style_class: 'sysmon-pill' });
+        this._power = label('', 'sysmon-title');
+        this._powerPill.add(this._power, { y_fill: false, y_align: St.Align.MIDDLE });
+        head.add(this._powerPill, { y_fill: false, y_align: St.Align.MIDDLE });
         this._pill = new St.BoxLayout({ style_class: 'sysmon-pill' });
         this._dot = new St.Widget({ style_class: 'sysmon-dot' });
         this._temp = label('', 'sysmon-title');
@@ -54,8 +58,10 @@ class Card {
     }
 
     // threadHistory / threadView: only for the card that has the button
-    update({ subtitle, showTemp, temp, a, b, history, caption, threadHistory, threadView }, cfg) {
+    update({ subtitle, showPower, power, showTemp, temp, a, b, history, caption, threadHistory, threadView }, cfg) {
         this._subtitle.text = subtitle;
+        this._powerPill.visible = showPower;
+        this._power.text = Stats.powerText(power);
         this._pill.visible = showTemp;
         const dot = Stats.valid(temp) ? Stats.tempDotColor(temp, cfg) : 'rgba(128, 128, 128, 0.5)';
         this._dot.style = `background-color: ${dot};`;
@@ -323,6 +329,8 @@ class PopupView {
         this._cpu.actor.visible = show.popupCpu || show.popupRam;
         this._cpu.update({
             subtitle: stats.cpuName,
+            showPower: show.popupCpuPower,
+            power: stats.cpuPower,
             showTemp: show.popupCpuTemp,
             temp: stats.cpuTemp,
             a: {
@@ -343,6 +351,8 @@ class PopupView {
         this._gpu.actor.visible = show.popupGpu || show.popupVram;
         this._gpu.update({
             subtitle: stats.gpuName,
+            showPower: show.popupGpuPower,
+            power: stats.gpuPower,
             showTemp: show.popupGpuTemp,
             temp: stats.gpuTemp,
             a: {

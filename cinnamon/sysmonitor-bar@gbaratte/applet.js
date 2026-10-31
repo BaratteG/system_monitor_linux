@@ -18,7 +18,7 @@ const TASK_CHECK_INTERVAL = 500;
 const REFRESH_KEYS = ['gpuSource', 'netInterface', 'customPaths', 'folderRefresh'];
 const DISPLAY_KEYS = [
     'warningTemp', 'criticalTemp', 'autoHide', 'diskPrefs',
-    'cpuPanel', 'cpuPopup', 'tempPanel', 'tempPopup', 'freqPopup', 'threadsPopup',
+    'cpuPanel', 'cpuPopup', 'tempPanel', 'tempPopup', 'freqPopup', 'powerPopup', 'threadsPopup',
     'ramPanel', 'ramPopup', 'amountsPanel', 'gpuPanel', 'gpuPopup', 'vramPanel', 'vramPopup',
     'diskPanel', 'diskPopup', 'netPanel', 'netPopup',
 ];
