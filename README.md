@@ -2,6 +2,8 @@
 
 Widget de panneau pour **KDE Plasma 5.27** (plasmoid) et **Cinnamon 5.8** (applet) : CPU, RAM, GPU et VRAM (usage et températures), stockage (partitions, dossiers, partages réseau) et débit réseau descendant et montant.
 
+![Popup sous KDE Plasma : cartes Processeur, Carte graphique, Réseau et Stockage](docs/popup.png)
+
 ## Fonctionnalités
 - Affichage compact en groupes : `CPU 12% 45°  RAM 15% 9.1/60G  |  GPU 3% 44°  VRAM 18% 5.9/32G  |  NET ↓1.2M ↑45K  |  / 25%  home 40%`, avec une fine barre d'usage sous chaque valeur. Libellés au-dessus des valeurs sur un panneau épais, colonne sur panneau vertical.
 - Températures colorées selon des seuils (alerte 70 °C, critique 85 °C par défaut).
