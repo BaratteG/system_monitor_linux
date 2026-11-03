@@ -154,6 +154,13 @@ Item {
 
     // shell argument: single quotes, embedded quotes escaped
     function shellQuote(str) { return "'" + str.replace(/'/g, "'\\''") + "'" }
+    // process names and command lines are chosen by whoever started the process:
+    // as rich text, an <img src="http://…"> would be fetched. The attached tooltip
+    // has no textFormat, so its text is escaped and forced to rich text instead.
+    function htmlEscape(str) {
+        return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    }
+    function plainTooltip(str) { return "<span>" + htmlEscape(str).replace(/\n/g, "<br>") + "</span>" }
     readonly property string trackedSpec: tracked.map(function (t) {
         return (t.kind === "mount" ? "m|" : "f|") + t.path.replace(/[\r\n]/g, "")
     }).join("\n")
@@ -1859,6 +1866,7 @@ Item {
                                 PlasmaComponents3.Label {
                                     Layout.fillWidth: true
                                     text: model.pname
+                                    textFormat: Text.PlainText
                                     elide: Text.ElideRight
                                 }
                                 PlasmaComponents3.Label {
@@ -1888,8 +1896,8 @@ Item {
                                 onClicked: root.selectProc(model.pid)
                                 PlasmaComponents3.ToolTip.visible: containsMouse
                                 PlasmaComponents3.ToolTip.delay: 500
-                                PlasmaComponents3.ToolTip.text: (model.command || model.pname)
-                                    + (model.killable ? "" : "\nProcessus système ou d'un autre utilisateur")
+                                PlasmaComponents3.ToolTip.text: root.plainTooltip((model.command || model.pname)
+                                    + (model.killable ? "" : "\nProcessus système ou d'un autre utilisateur"))
                             }
                         }
                     }
@@ -1919,6 +1927,7 @@ Item {
                     PlasmaComponents3.Label {
                         Layout.fillWidth: true
                         text: panel.sel ? panel.sel.pname + " · PID " + panel.sel.pid : "Aucun processus sélectionné"
+                        textFormat: Text.PlainText
                         elide: Text.ElideRight
                         opacity: panel.sel ? 1 : 0.6
                     }
@@ -1935,6 +1944,7 @@ Item {
                     Layout.fillWidth: true
                     // one line is always reserved, so the list doesn't jump
                     text: root.killStatus || " "
+                    textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                     maximumLineCount: 2
                     elide: Text.ElideRight

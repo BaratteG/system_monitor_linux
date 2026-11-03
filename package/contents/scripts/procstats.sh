@@ -18,30 +18,50 @@ cpu_sample() {
   local u n s idle iow irq sirq st
   read -r _ u n s idle iow irq sirq st _ < "$proc/stat"
   echo "total $((u + n + s + idle + iow + irq + sirq + st))"
-  cat "$proc"/[0-9]*/stat 2>/dev/null
+  # -H prefixes each line with its file: a process can put a newline in its
+  # name, so a stat file may span lines, and its PID is taken from the path,
+  # never from the text, which a process named "x\n1234 (y" would forge
+  grep -aHs '' "$proc"/[0-9]*/stat
 }
 
 # %cpu of ps is an average over the whole life of the process, so measure a
-# window instead; cat and not awk on the files: mawk stops on a vanished process
+# window instead; grep and not awk on the files: mawk stops on a vanished process
 list_cpu() {
   local a b
   a=$(cpu_sample)
   sleep 1
   b=$(cpu_sample)
   printf '%s\n--\n%s\n' "$a" "$b" | awk -v page_kib=$(($(getconf PAGESIZE) / 1024)) '
-    $1 == "--" { second = 1; next }
-    $1 == "total" { total = second ? $2 - total : $2; next }
-    match($0, /.*\)/) {
-      # the name may hold spaces and parentheses: fields restart after the last ")"
-      split(substr($0, RLENGTH + 2), f, " ")
-      t = f[12] + f[13]
-      if (!second) { prev[$1] = t; next }
-      # no memory: kernel thread
-      if (f[1] == "Z" || f[22] + 0 == 0) next
-      start = index($0, "(") + 1
-      use = total > 0 ? 100 * (t - prev[$1]) / total : 0
-      printf "%s|%.1f|%d|%s\n", $1, use, f[22] * page_kib / 1024, substr($0, start, RLENGTH - start)
-    }'
+    # handles the stat file of "pid", whose lines were gathered in "buf"
+    function flush(   f, t, start, name, use) {
+      # the name may hold spaces, parentheses and newlines: fields restart after the last ")"
+      if (pid != "" && match(buf, /.*\)/)) {
+        split(substr(buf, RLENGTH + 2), f, " ")
+        t = f[12] + f[13]
+        if (!second) prev[pid] = t
+        # no memory: kernel thread
+        else if (f[1] != "Z" && f[22] + 0 != 0) {
+          start = index(buf, "(") + 1
+          name = substr(buf, start, RLENGTH - start)
+          gsub(/[|\n\r\t]/, " ", name)
+          use = total > 0 ? 100 * (t - prev[pid]) / total : 0
+          printf "%s|%.1f|%d|%s\n", pid, use, f[22] * page_kib / 1024, name
+        }
+      }
+      pid = ""; buf = ""
+    }
+    $1 == "--" { flush(); second = 1; next }
+    $1 == "total" { flush(); total = second ? $2 - total : $2; next }
+    {
+      i = index($0, "/stat:")
+      if (!i) next
+      p = substr($0, 1, i - 1)
+      sub(/.*\//, "", p)
+      if (p == pid) { buf = buf "\n" substr($0, i + 6); next }
+      flush()
+      if (p ~ /^[0-9]+$/) { pid = p; buf = substr($0, i + 6) }
+    }
+    END { flush() }'
 }
 
 # the columns of pmon depend on the driver: find them by name in the header
@@ -98,6 +118,7 @@ list_amd() {
 rank() {
   local pid use mem name killable args cmd
   sort -t '|' -k2,2nr -k3,3nr | head -n "$limit" | while IFS='|' read -r pid use mem name; do
+    [[ $pid =~ ^[0-9]+$ ]] || continue
     mapfile 2>/dev/null -d '' -t args < "$proc/$pid/cmdline" || continue
     [ -n "$name" ] || read -r name 2>/dev/null < "$proc/$pid/comm"
     killable=0
