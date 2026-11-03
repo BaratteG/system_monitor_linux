@@ -45,7 +45,7 @@ function gioTotal(mib) {
 
 function gio(mib) { return (mib / 1024).toFixed(1); }
 
-// "AMD Ryzen 9 9950X3D 16-Core Processor" -> "AMD Ryzen 9 9950X3D"
+// "AMD Ryzen 9 7950X 16-Core Processor" -> "AMD Ryzen 9 7950X"
 // "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz" -> "Intel Core i7-9700K"
 function cleanCpuName(name) {
     return name.replace(/\((R|TM)\)/gi, '')
